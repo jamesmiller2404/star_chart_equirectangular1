@@ -1,0 +1,4 @@
+*.md !text !filter !merge !diff
+*.html !text !filter !merge !diff
+LICENSE !text !filter !merge !diff
+.gitignore !text !filter !merge !diff
