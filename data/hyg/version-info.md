@@ -1,8 +1,32 @@
 ### Version changes
 
-The latest version (as of Jan. 20, 2024) is v4.1. 
+The latest version (as of June 29, 2025) is v4.2. 
 
 ##### Previous Versions:
+
+###### HYG v4.1: Double star name updates
+
+HYG 4.1 contains 1 update:
+
+1. The following stars have a primary with a proper name, but an unnamed secondary. For consistency in labeling, in HYG 4.1, these secondaries have a name of "[primary name] B". 
+
+These names are unofficial. They are intended to make these double stars (which, in most cases, are relatively wide) show more consistent labels or names on charts that resolve the double, or lists that show both stars. Without the "B" names, labels on charts or names in lists would often look something like "Revati" and "ζ Psc", and it wouldn't always be clear that the two stars are strongly historically associated.
+
+|HIP ID|HR/Yale ID|Bayer/Flamsteed|HYG 4.1 Name| 
+|------|----------|---------------|------------|
+5743|362|ζ Psc|Revati B
+63121|4914|α¹ Cvn|Cor Caroli B
+75415|5734|μ² Boo|Alkalurops B
+78821|5985|β² Sco|Acrab B
+79045|6009|κ Her|Marsic B
+866230|6637|ψ¹ Dra|Dziban B
+92951|7142|θ² Ser|Alya B
+95951|7418|β² Cyg|Albireo B
+||2890|α Gem|Castor B
+||4374|ξ UMa|Alula Australis B
+||6402|36 Oph|Guniibuu B
+
+Note that α¹ CVn really is the dimmer component -- α² is the one officially designated "Cor Caroli" -- and the stars Revati, Marsic, Dziban, Castor, Alula Australis, and Gunibuu have the same Bayer or Flamsteed ID for both components, so these in particular are difficult to disambiguate without having an additional proper name on the "B" component.
 
 ###### v4.0: Minor name updates and major license update
 

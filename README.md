@@ -2,29 +2,11 @@
 
 ### Versions and Licensing:
 
-#### Current version: HYG v4.1 (directory: hyg/CURRENT/hyg_v41.csv.gz)
+#### Current version: HYG v4.2 (directory: hyg/CURRENT/hyg_v42.csv.gz)
 
-HYG 4.1 contains 1 update:
+HYG 4.2 contains 1 update:
 
-1. The following stars have a primary with a proper name, but an unnamed secondary. For consistency in labeling, in HYG 4.1, these secondaries have a name of "[primary name] B". 
-
-These names are unofficial. They are intended to make these double stars (which, in most cases, are relatively wide) show more consistent labels or names on charts that resolve the double, or lists that show both stars. Without the "B" names, labels on charts or names in lists would often look something like "Revati" and "ζ Psc", and it wouldn't always be clear that the two stars are strongly historically associated.
-
-|HIP ID|HR/Yale ID|Bayer/Flamsteed|HYG 4.1 Name| 
-|------|----------|---------------|------------|
-5743|362|ζ Psc|Revati B
-63121|4914|α¹ Cvn|Cor Caroli B
-75415|5734|μ² Boo|Alkalurops B
-78821|5985|β² Sco|Acrab B
-79045|6009|κ Her|Marsic B
-866230|6637|ψ¹ Dra|Dziban B
-92951|7142|θ² Ser|Alya B
-95951|7418|β² Cyg|Albireo B
-||2890|α Gem|Castor B
-||4374|ξ UMa|Alula Australis B
-||6402|36 Oph|Guniibuu B
-
-Note that α¹ CVn really is the dimmer component -- α² is the one officially designated "Cor Caroli" -- and the stars Revati, Marsic, Dziban, Castor, Alula Australis, and Gunibuu have the same Bayer or Flamsteed ID for both components, so these in particular are difficult to disambiguate without having an additional proper name on the "B" component.
+1. Since the last version, 34 stars have been updated with an IAU-approved proper name. These names were all made official in late 2024 or early 2025. The new names are given in the file hyg/CURRENT/v42_name_updates.md.
 
 ### License:
 
@@ -43,11 +25,11 @@ See data/hyg/README.md for details about the HYG catalog.
 
 This is the original focus of this data collection. HYG combines every identifiable star in the HIPPARCOS, Yale Bright Star, and Gliese (nearby star) catalogs into a combined dataset of the stars' currently best-known positions, brightnesses, spectral types, and various additional catalog IDs such as traditional names and Bayer designations.
 
-The current HYG catalog is v4.1. Versions since v4.0 are licensed as above (CC-BY-SA 4.0). Earlier versions use the CC-BY-SA v2.5 license.
+The current HYG catalog is v4.2. Versions since v4.0 are licensed as above (CC-BY-SA 4.0). Earlier versions use the CC-BY-SA v2.5 license.
 
 The previous version series, v3.x, was originally compiled in 2014. There have been a few notable changes since then, mostly to add additional ID/label information and to correct a few errors. The most significant was a change in March 2023, to merge a PR that added the official star names from the IAU Working Group on Star Names in 2018, as well as to add a few additional old catalog designations for some nearby stars (e.g., "Ross 128") that may as well be proper names at this point. Details of the version history are in data/hyg/version-info.md.
 
-The final version of v3, v3.8, has only very minor differences from v4.1 in data content; the major version update (v3->4)  was done largely to make updated licensing easier. 
+The final version of v3, v3.8, has only very minor differences from v4.2 in data content; the major version update (v3->4)  was done largely to make updated licensing easier. 
 
 All versions prior to v3.8 have known errors or inconsistencies in star data or IDs, or are significantly incomplete compared to later versions;  These versions are no longer kept in this repository; please contact the maintainer of this repository if you are interested in any of them.
 
