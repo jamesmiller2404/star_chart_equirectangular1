@@ -37,7 +37,7 @@ All versions prior to v3.8 have known errors or inconsistencies in star data or 
 ### AT-HYG (Tycho-2/Gaia based) HYGLike Subset
 #### Directory /data/athyg_v3 - Currently 118,971 stars
 
-This is a subset of the larger AT-HYG database (https://codeberg.com/astronexus/athyg) that mimics the original HYG database as closely as possible. The HYGLike subset contains all the data updates (such as Gaia DR3 distances and velocities) the AT-HYG build was able to collect for HYG stars.
+This is a subset of the larger AT-HYG database (https://codeberg.org/astronexus/athyg) that mimics the original HYG database as closely as possible. The HYGLike subset contains all the data updates (such as Gaia DR3 distances and velocities) the AT-HYG build was able to collect for HYG stars.
 
 See data/athyg_v3/README.md for more details.
 
