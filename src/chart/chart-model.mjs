@@ -63,12 +63,7 @@ export function pointForStar(star, width = DEFAULT_CHART.width, height = DEFAULT
 }
 
 export function colorForStar(star) {
-  if (star.ci === null || star.ci === undefined) return '#e8eeff';
-  if (star.ci < -0.1) return '#b9d2ff';
-  if (star.ci < 0.35) return '#dae6ff';
-  if (star.ci < 0.8) return '#fff4d2';
-  if (star.ci < 1.4) return '#ffd296';
-  return '#ffb274';
+  return '#f2f2f2';
 }
 
 export function starRadius(star, scale = 1) {

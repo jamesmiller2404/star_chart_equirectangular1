@@ -157,12 +157,7 @@
       count.textContent = `${dataset.count.toLocaleString()} stars`;
 
       function colorForStar(star) {
-        if (star.ci === null) return 'rgb(232,238,255)';
-        if (star.ci < -0.1) return 'rgb(185,210,255)';
-        if (star.ci < 0.35) return 'rgb(218,230,255)';
-        if (star.ci < 0.8) return 'rgb(255,244,210)';
-        if (star.ci < 1.4) return 'rgb(255,210,150)';
-        return 'rgb(255,178,116)';
+        return 'rgb(242,242,242)';
       }
 
       function pointForStar(star, width, height, padding) {
