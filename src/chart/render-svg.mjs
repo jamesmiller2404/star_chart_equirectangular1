@@ -26,13 +26,20 @@ const TARGET_MIN_STAR_DIAMETER_PX = 0.75;
 const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_PX_PER_IN;
 const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
-
 export const PLEIADES_M45_BOUNDS = {
-  raMin: 3 + 42 / 60,
-  raMax: 3 + 52 / 60,
-  decMin: 23 + 15 / 60,
-  decMax: 25 + 15 / 60,
-  magLimit: 10,
+  raMin: 3 + 40 / 60,
+  raMax: 3 + 55 / 60,
+  decMin: 22,
+  decMax: 26,
+  magLimit: 12,
+};
+
+export const SCORPIO_BOUNDS = {
+  raMin: 15 + 40 / 60,
+  raMax: 18,
+  decMin: -50,
+  decMax: -15,
+  magLimit: 7.5,
 };
 
 const PLEIADES_INSET = {
@@ -46,12 +53,19 @@ const PLEIADES_INSET = {
   paddingBottom: 66,
 };
 
+const SCORPIO_INSET = {
+  x: 70,
+  y: 70,
+  width: 720,
+  height: 720,
+  paddingLeft: 76,
+  paddingRight: 36,
+  paddingTop: 78,
+  paddingBottom: 66,
+};
+
 function number(value) {
   return Math.round(value * 100) / 100;
-}
-
-function smoothstep(value) {
-  return value * value * (3 - 2 * value);
 }
 
 function renderGrid(width, height, padding) {
@@ -180,72 +194,126 @@ function formatRaLabel(ra) {
 function formatDecLabel(dec) {
   const sign = dec >= 0 ? '+' : '-';
   const absolute = Math.abs(dec);
-  const degrees = Math.floor(absolute);
-  const minutes = Math.round((absolute - degrees) * 60);
+  const totalMinutes = Math.round(absolute * 60);
+  const degrees = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
   return `${sign}${degrees} deg ${String(minutes).padStart(2, '0')}'`;
 }
 
-function pointForPleiadesStar(star) {
-  const plotWidth = PLEIADES_INSET.width - PLEIADES_INSET.paddingLeft - PLEIADES_INSET.paddingRight;
-  const plotHeight = PLEIADES_INSET.height - PLEIADES_INSET.paddingTop - PLEIADES_INSET.paddingBottom;
+function ceilToStep(value, step) {
+  return Math.ceil((value - 1e-9) / step) * step;
+}
+
+function floorToStep(value, step) {
+  return Math.floor((value + 1e-9) / step) * step;
+}
+
+function pointForInsetStar(star, inset, bounds) {
+  const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
+  const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
   return {
-    x: PLEIADES_INSET.paddingLeft + ((PLEIADES_M45_BOUNDS.raMax - star.ra) / (PLEIADES_M45_BOUNDS.raMax - PLEIADES_M45_BOUNDS.raMin)) * plotWidth,
-    y: PLEIADES_INSET.paddingTop + ((PLEIADES_M45_BOUNDS.decMax - star.dec) / (PLEIADES_M45_BOUNDS.decMax - PLEIADES_M45_BOUNDS.decMin)) * plotHeight,
+    x: inset.paddingLeft + ((bounds.raMax - star.ra) / (bounds.raMax - bounds.raMin)) * plotWidth,
+    y: inset.paddingTop + ((bounds.decMax - star.dec) / (bounds.decMax - bounds.decMin)) * plotHeight,
   };
 }
 
-function pleiadesStarRadius(star) {
-  const minRadius = 0.75;
-  const maxRadius = 4.8;
-  const brightness = Math.min(1, Math.max(0, (PLEIADES_M45_BOUNDS.magLimit - star.mag) / 8.4));
-  return minRadius + smoothstep(brightness) * (maxRadius - minRadius);
-}
-
-function renderPleiadesGrid() {
-  const plotX = PLEIADES_INSET.paddingLeft;
-  const plotY = PLEIADES_INSET.paddingTop;
-  const plotWidth = PLEIADES_INSET.width - PLEIADES_INSET.paddingLeft - PLEIADES_INSET.paddingRight;
-  const plotHeight = PLEIADES_INSET.height - PLEIADES_INSET.paddingTop - PLEIADES_INSET.paddingBottom;
-  const lines = [
-    `    <g id="pleiades-m45-grid" stroke="${PRINT_CHART.grid}" stroke-width="1">`,
-  ];
-
-  for (let totalMinutes = 42; totalMinutes <= 52; totalMinutes += 2) {
-    const ra = 3 + totalMinutes / 60;
-    const x = plotX + ((PLEIADES_M45_BOUNDS.raMax - ra) / (PLEIADES_M45_BOUNDS.raMax - PLEIADES_M45_BOUNDS.raMin)) * plotWidth;
-    lines.push(`      <line x1="${number(x)}" y1="${plotY}" x2="${number(x)}" y2="${number(plotY + plotHeight)}" stroke-opacity="${GRID_OPACITY}" />`);
+function createInsetMagnitudeRange(stars, bounds) {
+  if (!stars.length) {
+    return {
+      brightMagnitude: 0,
+      dimMagnitude: bounds.magLimit,
+    };
   }
 
-  for (let minutes = 15; minutes <= 135; minutes += 15) {
-    const dec = 23 + minutes / 60;
-    const y = plotY + ((PLEIADES_M45_BOUNDS.decMax - dec) / (PLEIADES_M45_BOUNDS.decMax - PLEIADES_M45_BOUNDS.decMin)) * plotHeight;
-    const opacity = minutes % 30 === 0 ? GRID_OPACITY : 0.24;
+  let brightMagnitude = Infinity;
+  let dimMagnitude = -Infinity;
+  for (const star of stars) {
+    brightMagnitude = Math.min(brightMagnitude, star.mag);
+    dimMagnitude = Math.max(dimMagnitude, star.mag);
+  }
+
+  return {
+    brightMagnitude,
+    dimMagnitude,
+  };
+}
+
+function insetStarRadius(star, magnitudeRange) {
+  const minRadius = 0.75;
+  const maxRadius = 9;
+  const magnitudeSpan = Math.max(0.01, magnitudeRange.dimMagnitude - magnitudeRange.brightMagnitude);
+  const brightness = Math.min(1, Math.max(0, (magnitudeRange.dimMagnitude - star.mag) / magnitudeSpan));
+  return minRadius * (maxRadius / minRadius) ** brightness;
+}
+
+function renderInsetGrid(idPrefix, inset, bounds) {
+  const plotX = inset.paddingLeft;
+  const plotY = inset.paddingTop;
+  const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
+  const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
+  const lines = [
+    `    <g id="${idPrefix}-grid" stroke="${PRINT_CHART.grid}" stroke-width="1">`,
+  ];
+
+  const raTickStepHours = 5 / 60;
+  const firstRaTick = ceilToStep(bounds.raMin, raTickStepHours);
+  const lastRaTick = floorToStep(bounds.raMax, raTickStepHours);
+  for (let ra = firstRaTick; ra <= lastRaTick + 1e-9; ra += raTickStepHours) {
+    const x = plotX + ((bounds.raMax - ra) / (bounds.raMax - bounds.raMin)) * plotWidth;
+    const opacity = Math.round(ra * 60) % 10 === 0 ? GRID_OPACITY : 0.24;
+    lines.push(`      <line x1="${number(x)}" y1="${plotY}" x2="${number(x)}" y2="${number(plotY + plotHeight)}" stroke-opacity="${opacity}" />`);
+  }
+
+  const decTickStep = 10 / 60;
+  const firstDecTick = ceilToStep(bounds.decMin, decTickStep);
+  const lastDecTick = floorToStep(bounds.decMax, decTickStep);
+  for (let dec = firstDecTick; dec <= lastDecTick + 1e-9; dec += decTickStep) {
+    const y = plotY + ((bounds.decMax - dec) / (bounds.decMax - bounds.decMin)) * plotHeight;
+    const opacity = Math.round(dec * 60) % 60 === 0 ? GRID_OPACITY : 0.18;
     lines.push(`      <line x1="${plotX}" y1="${number(y)}" x2="${number(plotX + plotWidth)}" y2="${number(y)}" stroke-opacity="${opacity}" />`);
+  }
+
+  lines.push('    </g>');
+  lines.push(`    <g id="${idPrefix}-ra-5-minute-ticks" stroke="${PRINT_CHART.grid}" stroke-opacity="0.55" stroke-width="1">`);
+
+  const smallRaTickStepHours = 5 / 60;
+  const firstSmallRaTick = ceilToStep(bounds.raMin, smallRaTickStepHours);
+  const lastSmallRaTick = floorToStep(bounds.raMax, smallRaTickStepHours);
+  for (let ra = firstSmallRaTick; ra <= lastSmallRaTick + 1e-9; ra += smallRaTickStepHours) {
+    const x = plotX + ((bounds.raMax - ra) / (bounds.raMax - bounds.raMin)) * plotWidth;
+    const isMajorTick = Math.round(ra * 60) % 10 === 0;
+    const tickLength = isMajorTick ? 12 : 7;
+    lines.push(`      <line x1="${number(x)}" y1="${plotY}" x2="${number(x)}" y2="${number(plotY + tickLength)}" />`);
+    lines.push(`      <line x1="${number(x)}" y1="${number(plotY + plotHeight)}" x2="${number(x)}" y2="${number(plotY + plotHeight - tickLength)}" />`);
   }
 
   lines.push('    </g>');
   return lines.join('\n');
 }
 
-function renderPleiadesCoordinateLabels() {
-  const plotX = PLEIADES_INSET.paddingLeft;
-  const plotY = PLEIADES_INSET.paddingTop;
-  const plotWidth = PLEIADES_INSET.width - PLEIADES_INSET.paddingLeft - PLEIADES_INSET.paddingRight;
-  const plotHeight = PLEIADES_INSET.height - PLEIADES_INSET.paddingTop - PLEIADES_INSET.paddingBottom;
+function renderInsetCoordinateLabels(idPrefix, inset, bounds) {
+  const plotX = inset.paddingLeft;
+  const plotY = inset.paddingTop;
+  const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
+  const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
   const lines = [
-    `    <g id="pleiades-m45-coordinate-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="13">`,
+    `    <g id="${idPrefix}-coordinate-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="13">`,
   ];
 
-  for (let totalMinutes = 42; totalMinutes <= 52; totalMinutes += 2) {
-    const ra = 3 + totalMinutes / 60;
-    const x = plotX + ((PLEIADES_M45_BOUNDS.raMax - ra) / (PLEIADES_M45_BOUNDS.raMax - PLEIADES_M45_BOUNDS.raMin)) * plotWidth;
+  const raTickStepHours = 10 / 60;
+  const firstRaTick = ceilToStep(bounds.raMin, raTickStepHours);
+  const lastRaTick = floorToStep(bounds.raMax, raTickStepHours);
+  for (let ra = firstRaTick; ra <= lastRaTick + 1e-9; ra += raTickStepHours) {
+    const x = plotX + ((bounds.raMax - ra) / (bounds.raMax - bounds.raMin)) * plotWidth;
     lines.push(`      <text x="${number(x)}" y="${number(plotY - 10)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
     lines.push(`      <text x="${number(x)}" y="${number(plotY + plotHeight + 25)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
   }
 
-  for (let minutes = 15; minutes <= 135; minutes += 30) {
-    const dec = 23 + minutes / 60;
-    const y = plotY + ((PLEIADES_M45_BOUNDS.decMax - dec) / (PLEIADES_M45_BOUNDS.decMax - PLEIADES_M45_BOUNDS.decMin)) * plotHeight;
+  const decLabelStep = 2;
+  const firstDecLabel = ceilToStep(bounds.decMin, decLabelStep);
+  const lastDecLabel = floorToStep(bounds.decMax, decLabelStep);
+  for (let dec = firstDecLabel; dec <= lastDecLabel + 1e-9; dec += decLabelStep) {
+    const y = plotY + ((bounds.decMax - dec) / (bounds.decMax - bounds.decMin)) * plotHeight;
     lines.push(`      <text x="${number(plotX - 10)}" y="${number(y + 5)}" text-anchor="end">${formatDecLabel(dec)}</text>`);
     lines.push(`      <text x="${number(plotX + plotWidth + 10)}" y="${number(y + 5)}" text-anchor="start">${formatDecLabel(dec)}</text>`);
   }
@@ -254,17 +322,17 @@ function renderPleiadesCoordinateLabels() {
   return lines.join('\n');
 }
 
-function renderPleiadesStars(stars) {
-  const lines = ['    <g id="pleiades-m45-stars" clip-path="url(#pleiades-m45-clip)">'];
+function renderInsetStars(idPrefix, stars, magnitudeRange, inset, bounds) {
+  const lines = [`    <g id="${idPrefix}-stars" clip-path="url(#${idPrefix}-clip)">`];
   const sortedStars = [...stars].sort((a, b) => b.mag - a.mag);
 
   for (const star of sortedStars) {
-    const point = pointForPleiadesStar(star);
-    const radius = pleiadesStarRadius(star);
+    const point = pointForInsetStar(star, inset, bounds);
+    const radius = insetStarRadius(star, magnitudeRange);
     const strokeWidth = Math.max(0.08, Math.min(0.18, radius * 0.14));
     const nameAttribute = star.proper ? ` data-name="${escapeXml(star.proper)}"` : '';
     lines.push(
-      `      <circle id="pleiades-m45-star-${star.id}"${nameAttribute} cx="${number(point.x)}" cy="${number(point.y)}" r="${number(radius)}" fill="${colorForStar(star)}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`,
+      `      <circle id="${idPrefix}-star-${star.id}"${nameAttribute} cx="${number(point.x)}" cy="${number(point.y)}" r="${number(radius)}" fill="${colorForStar(star)}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`,
     );
   }
 
@@ -272,43 +340,44 @@ function renderPleiadesStars(stars) {
   return lines.join('\n');
 }
 
-function renderPleiadesStarLabels(stars) {
+function renderInsetStarLabels(idPrefix, stars, magnitudeRange, inset, bounds) {
   const labelStars = stars.filter((star) => star.proper || star.mag <= 4.3);
   const lines = [
-    `    <g id="pleiades-m45-star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="11">`,
+    `    <g id="${idPrefix}-star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="11">`,
   ];
 
   for (const star of labelStars) {
-    const point = pointForPleiadesStar(star);
-    const radius = pleiadesStarRadius(star);
-    lines.push(`      <text id="pleiades-m45-label-${star.id}" x="${number(point.x + radius + 4)}" y="${number(point.y - radius - 2)}">${escapeXml(labelForStar(star))}</text>`);
+    const point = pointForInsetStar(star, inset, bounds);
+    const radius = insetStarRadius(star, magnitudeRange);
+    lines.push(`      <text id="${idPrefix}-label-${star.id}" x="${number(point.x + radius + 4)}" y="${number(point.y - radius - 2)}">${escapeXml(labelForStar(star))}</text>`);
   }
 
   lines.push('    </g>');
   return lines.join('\n');
 }
 
-function renderPleiadesInset(stars = []) {
-  const plotX = PLEIADES_INSET.paddingLeft;
-  const plotY = PLEIADES_INSET.paddingTop;
-  const plotWidth = PLEIADES_INSET.width - PLEIADES_INSET.paddingLeft - PLEIADES_INSET.paddingRight;
-  const plotHeight = PLEIADES_INSET.height - PLEIADES_INSET.paddingTop - PLEIADES_INSET.paddingBottom;
+function renderGaiaInset({ idPrefix, layerName, title, inset, bounds, stars = [] }) {
+  const plotX = inset.paddingLeft;
+  const plotY = inset.paddingTop;
+  const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
+  const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
+  const magnitudeRange = createInsetMagnitudeRange(stars, bounds);
 
   return [
-    `  <g id="pleiades-m45-layer" data-layer="Pleiades Cluster M45 inset" transform="translate(${PLEIADES_INSET.x} ${PLEIADES_INSET.y})">`,
-    '    <title>Pleiades Cluster (M45) Inset</title>',
-    `    <desc>Zoomed Pleiades Cluster chart bounded by RA ${formatRaLabel(PLEIADES_M45_BOUNDS.raMin)} to ${formatRaLabel(PLEIADES_M45_BOUNDS.raMax)} and Dec ${formatDecLabel(PLEIADES_M45_BOUNDS.decMin)} to ${formatDecLabel(PLEIADES_M45_BOUNDS.decMax)}, magnitude &lt;= ${PLEIADES_M45_BOUNDS.magLimit}.</desc>`,
+    `  <g id="${idPrefix}-layer" data-layer="${escapeXml(layerName)}" transform="translate(${inset.x} ${inset.y})">`,
+    `    <title>${escapeXml(title)} Inset</title>`,
+    `    <desc>${escapeXml(title)} chart using Gaia DR3 sources, bounded by RA ${formatRaLabel(bounds.raMin)} to ${formatRaLabel(bounds.raMax)} and Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}, Gaia G &lt;= ${bounds.magLimit}.</desc>`,
     '    <defs>',
-    `      <clipPath id="pleiades-m45-clip"><rect x="${plotX}" y="${plotY}" width="${plotWidth}" height="${plotHeight}" /></clipPath>`,
+    `      <clipPath id="${idPrefix}-clip"><rect x="${plotX}" y="${plotY}" width="${plotWidth}" height="${plotHeight}" /></clipPath>`,
     '    </defs>',
-    `    <rect id="pleiades-m45-background" width="${PLEIADES_INSET.width}" height="${PLEIADES_INSET.height}" fill="${PRINT_CHART.background}" />`,
-    `    <text id="pleiades-m45-title" x="${plotX}" y="28" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="22">Pleiades Cluster (M45)</text>`,
-    `    <text id="pleiades-m45-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="12">Mag &lt;= ${PLEIADES_M45_BOUNDS.magLimit} / RA ${formatRaLabel(PLEIADES_M45_BOUNDS.raMin)}-${formatRaLabel(PLEIADES_M45_BOUNDS.raMax)} / Dec ${formatDecLabel(PLEIADES_M45_BOUNDS.decMin)}-${formatDecLabel(PLEIADES_M45_BOUNDS.decMax)}</text>`,
-    renderPleiadesGrid(),
-    renderPleiadesCoordinateLabels(),
-    renderPleiadesStars(stars),
-    renderPleiadesStarLabels(stars),
-    `    <g id="pleiades-m45-frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="1.5">`,
+    `    <rect id="${idPrefix}-background" width="${inset.width}" height="${inset.height}" fill="${PRINT_CHART.background}" />`,
+    `    <text id="${idPrefix}-title" x="${plotX}" y="28" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="22">${escapeXml(title)}</text>`,
+    `    <text id="${idPrefix}-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="12">Gaia G &lt;= ${bounds.magLimit} / RA ${formatRaLabel(bounds.raMin)} to ${formatRaLabel(bounds.raMax)} / Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}</text>`,
+    renderInsetGrid(idPrefix, inset, bounds),
+    renderInsetCoordinateLabels(idPrefix, inset, bounds),
+    renderInsetStars(idPrefix, stars, magnitudeRange, inset, bounds),
+    renderInsetStarLabels(idPrefix, stars, magnitudeRange, inset, bounds),
+    `    <g id="${idPrefix}-frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="1.5">`,
     `      <rect x="${plotX}" y="${plotY}" width="${plotWidth}" height="${plotHeight}" />`,
     '    </g>',
     '  </g>',
@@ -333,14 +402,29 @@ export function renderStarChartSvg(dataset, options = {}) {
   parts.push(
     `<svg xmlns="http://www.w3.org/2000/svg" width="${PRINT_CHART.widthIn}in" height="${PRINT_CHART.heightIn}in" viewBox="0 0 ${documentWidth} ${documentHeight}" role="img" aria-label="HYG v4.2 all-sky star chart">`,
     '  <title>HYG Star Chart</title>',
-    `  <desc>HYG v4.2 star chart, magnitude &lt;= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper right contains a separate Pleiades Cluster M45 inset layer to magnitude ${PLEIADES_M45_BOUNDS.magLimit}.</desc>`,
+    `  <desc>HYG v4.2 star chart, magnitude &lt;= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper area contains separate Gaia DR3 inset layers for Scorpio and the Pleiades Cluster M45.</desc>`,
     '  <g id="background">',
     `    <rect width="${documentWidth}" height="${documentHeight}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
     '  <g id="top-data-area" data-purpose="Reserved for additional data and smaller charts">',
     `    <rect x="0" y="0" width="${documentWidth}" height="${chartY}" fill="none" />`,
     '  </g>',
-    renderPleiadesInset(options.pleiadesStars),
+    renderGaiaInset({
+      idPrefix: 'scorpio',
+      layerName: 'Scorpio Gaia DR3 inset',
+      title: 'Scorpio',
+      inset: SCORPIO_INSET,
+      bounds: SCORPIO_BOUNDS,
+      stars: options.scorpioStars,
+    }),
+    renderGaiaInset({
+      idPrefix: 'pleiades-m45',
+      layerName: 'Pleiades Cluster M45 inset',
+      title: 'Pleiades Cluster (M45)',
+      inset: PLEIADES_INSET,
+      bounds: PLEIADES_M45_BOUNDS,
+      stars: options.pleiadesStars,
+    }),
     `  <g id="equirectangular-star-chart" transform="translate(${chartX} ${chartY})">`,
     '  <g id="chart-background">',
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,

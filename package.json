@@ -8,6 +8,8 @@
     "build": "next build",
     "start": "next start",
     "build:data": "node scripts/build-star-chart-data.mjs",
+    "fetch:pleiades": "node scripts/fetch-pleiades-gaia.mjs",
+    "fetch:scorpio": "node scripts/fetch-scorpio-gaia.mjs",
     "export:svg": "node scripts/export-svg.mjs"
   },
   "dependencies": {
