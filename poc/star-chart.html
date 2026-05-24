@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HYG Star Chart POC</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #090b10;
+        --panel: #14171c;
+        --line: #303743;
+        --text: #eff3f8;
+        --muted: #aab4c2;
+        --accent: #f0c35b;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+
+      main {
+        width: min(1400px, 100%);
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      header {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px 20px;
+        align-items: end;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(22px, 3vw, 36px);
+        font-weight: 700;
+        letter-spacing: 0;
+      }
+
+      .meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        color: var(--muted);
+      }
+
+      .meta span {
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 5px 8px;
+        background: var(--panel);
+      }
+
+      .chart-wrap {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 2 / 1;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+        background: #05070b;
+      }
+
+      canvas {
+        display: block;
+        width: 100%;
+        height: 100%;
+      }
+
+      .tooltip {
+        position: absolute;
+        left: 0;
+        top: 0;
+        max-width: 220px;
+        pointer-events: none;
+        transform: translate(12px, 12px);
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 8px 10px;
+        background: rgba(12, 15, 20, 0.94);
+        color: var(--text);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        opacity: 0;
+      }
+
+      .tooltip strong {
+        display: block;
+        margin-bottom: 2px;
+        color: var(--accent);
+      }
+
+      footer {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: 10px;
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 700px) {
+        main {
+          padding: 12px;
+        }
+
+        .chart-wrap {
+          min-height: 260px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>HYG Star Chart POC</h1>
+        <div class="meta">
+          <span id="count">Loading stars...</span>
+          <span>Magnitude <= 7.5</span>
+          <span>2:1 RA/Dec chart</span>
+        </div>
+      </header>
+
+      <div class="chart-wrap">
+        <canvas id="chart" aria-label="All-sky star chart from HYG v4.2"></canvas>
+        <div class="tooltip" id="tooltip"></div>
+      </div>
+
+      <footer>
+        <span>Projection: RA 0h to 24h right-to-left, declination +90 to -90.</span>
+        <span>Data: HYG v4.2, CC-BY-SA 4.0.</span>
+      </footer>
+    </main>
+
+    <script type="module">
+      const canvas = document.querySelector('#chart');
+      const tooltip = document.querySelector('#tooltip');
+      const count = document.querySelector('#count');
+      const context = canvas.getContext('2d');
+      const response = await fetch('./stars-mag-7_5.json');
+      const dataset = await response.json();
+      const stars = dataset.stars;
+      const hoverTargets = [];
+
+      count.textContent = `${dataset.count.toLocaleString()} stars`;
+
+      function colorForStar(star) {
+        if (star.ci === null) return 'rgb(232,238,255)';
+        if (star.ci < -0.1) return 'rgb(185,210,255)';
+        if (star.ci < 0.35) return 'rgb(218,230,255)';
+        if (star.ci < 0.8) return 'rgb(255,244,210)';
+        if (star.ci < 1.4) return 'rgb(255,210,150)';
+        return 'rgb(255,178,116)';
+      }
+
+      function pointForStar(star, width, height, padding) {
+        const plotWidth = width - padding * 2;
+        const plotHeight = height - padding * 2;
+        return {
+          x: padding + ((24 - star.ra) / 24) * plotWidth,
+          y: padding + ((90 - star.dec) / 180) * plotHeight,
+        };
+      }
+
+      function drawGrid(width, height, padding) {
+        context.strokeStyle = 'rgba(114, 130, 151, 0.34)';
+        context.fillStyle = 'rgba(210, 220, 235, 0.78)';
+        context.lineWidth = 1;
+        context.font = `${Math.max(11, width / 120)}px system-ui, sans-serif`;
+
+        for (let minute = 0; minute <= 24 * 60; minute += 5) {
+          if (minute % 60 === 0) continue;
+          const hour = minute / 60;
+          const x = padding + ((24 - hour) / 24) * (width - padding * 2);
+          const isMedium = minute % 20 === 0;
+          const tickLength = isMedium ? 12 : 6;
+
+          context.beginPath();
+          context.strokeStyle = isMedium ? 'rgba(114, 130, 151, 0.48)' : 'rgba(114, 130, 151, 0.3)';
+          context.moveTo(x, padding);
+          context.lineTo(x, padding + tickLength);
+          context.moveTo(x, height - padding);
+          context.lineTo(x, height - padding - tickLength);
+          context.stroke();
+        }
+
+        context.strokeStyle = 'rgba(114, 130, 151, 0.38)';
+        for (let hour = 0; hour <= 24; hour += 1) {
+          const x = padding + ((24 - hour) / 24) * (width - padding * 2);
+          context.beginPath();
+          context.moveTo(x, padding);
+          context.lineTo(x, height - padding);
+          context.stroke();
+          context.textAlign = 'center';
+          context.textBaseline = 'top';
+          context.fillText(`${hour}h`, x, height - padding + 8);
+        }
+
+        for (let dec = -90; dec <= 90; dec += 5) {
+          if (dec % 10 === 0) continue;
+          const y = padding + ((90 - dec) / 180) * (height - padding * 2);
+          const tickLength = 6;
+
+          context.beginPath();
+          context.strokeStyle = 'rgba(114, 130, 151, 0.3)';
+          context.moveTo(padding, y);
+          context.lineTo(padding + tickLength, y);
+          context.moveTo(width - padding, y);
+          context.lineTo(width - padding - tickLength, y);
+          context.stroke();
+        }
+
+        context.strokeStyle = 'rgba(114, 130, 151, 0.34)';
+        for (let dec = -90; dec <= 90; dec += 10) {
+          const y = padding + ((90 - dec) / 180) * (height - padding * 2);
+          context.beginPath();
+          context.moveTo(padding, y);
+          context.lineTo(width - padding, y);
+          context.stroke();
+          context.textAlign = 'right';
+          context.textBaseline = 'middle';
+          context.fillText(`${dec > 0 ? '+' : ''}${dec}`, padding - 8, y);
+        }
+      }
+
+      function drawChart() {
+        const bounds = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const width = Math.round(bounds.width * dpr);
+        const height = Math.round(bounds.height * dpr);
+        const padding = Math.max(34, Math.round(width * 0.035));
+
+        canvas.width = width;
+        canvas.height = height;
+        hoverTargets.length = 0;
+
+        context.fillStyle = '#05070b';
+        context.fillRect(0, 0, width, height);
+        drawGrid(width, height, padding);
+
+        for (let i = stars.length - 1; i >= 0; i -= 1) {
+          const star = stars[i];
+          const point = pointForStar(star, width, height, padding);
+          const radius = Math.max(0.55, (8 - star.mag) * 0.72) * dpr;
+
+          context.beginPath();
+          context.fillStyle = colorForStar(star);
+          context.globalAlpha = Math.min(1, 0.32 + (7.5 - star.mag) / 5.5);
+          context.arc(point.x, point.y, radius, 0, Math.PI * 2);
+          context.fill();
+
+          if (star.mag <= 4.2 || star.proper) {
+            hoverTargets.push({ ...point, radius: Math.max(radius + 6 * dpr, 8 * dpr), star });
+          }
+        }
+
+        context.globalAlpha = 1;
+      }
+
+      function showNearest(event) {
+        const bounds = canvas.getBoundingClientRect();
+        const dpr = window.devicePixelRatio || 1;
+        const x = (event.clientX - bounds.left) * dpr;
+        const y = (event.clientY - bounds.top) * dpr;
+        let nearest = null;
+        let bestDistance = Infinity;
+
+        for (const target of hoverTargets) {
+          const distance = Math.hypot(target.x - x, target.y - y);
+          if (distance < target.radius && distance < bestDistance) {
+            nearest = target.star;
+            bestDistance = distance;
+          }
+        }
+
+        if (!nearest) {
+          tooltip.style.opacity = 0;
+          return;
+        }
+
+        const name = nearest.proper || nearest.bf || `HYG ${nearest.id}`;
+        tooltip.innerHTML = `<strong>${name}</strong>mag ${nearest.mag.toFixed(2)} · RA ${nearest.ra.toFixed(2)}h · Dec ${nearest.dec.toFixed(1)}°`;
+        tooltip.style.opacity = 1;
+        tooltip.style.left = `${event.clientX - bounds.left}px`;
+        tooltip.style.top = `${event.clientY - bounds.top}px`;
+      }
+
+      window.addEventListener('resize', drawChart);
+      canvas.addEventListener('mousemove', showNearest);
+      canvas.addEventListener('mouseleave', () => {
+        tooltip.style.opacity = 0;
+      });
+      drawChart();
+    </script>
+  </body>
+</html>
