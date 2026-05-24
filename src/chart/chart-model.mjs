@@ -67,7 +67,10 @@ export function colorForStar(star) {
 }
 
 export function starRadius(star, scale = 1) {
-  return Math.max(0.65, (8 - star.mag) * 0.78) * scale;
+  const minimumRadius = 0.65;
+  const linearRadius = Math.max(minimumRadius, (8 - star.mag) * 0.78);
+  const compression = 0.75;
+  return (minimumRadius + Math.log1p((linearRadius - minimumRadius) * compression) / compression) * scale;
 }
 
 export function starOpacity(star) {

@@ -169,6 +169,13 @@
         };
       }
 
+      function radiusForStar(star, scale = 1) {
+        const minimumRadius = 0.65;
+        const linearRadius = Math.max(minimumRadius, (8 - star.mag) * 0.78);
+        const compression = 0.75;
+        return (minimumRadius + Math.log1p((linearRadius - minimumRadius) * compression) / compression) * scale;
+      }
+
       function drawGrid(width, height, padding) {
         context.strokeStyle = 'rgba(114, 130, 151, 0.34)';
         context.fillStyle = 'rgba(210, 220, 235, 0.78)';
@@ -248,7 +255,7 @@
         for (let i = stars.length - 1; i >= 0; i -= 1) {
           const star = stars[i];
           const point = pointForStar(star, width, height, padding);
-          const radius = Math.max(0.55, (8 - star.mag) * 0.72) * dpr;
+          const radius = radiusForStar(star, dpr);
 
           context.beginPath();
           context.fillStyle = colorForStar(star);
