@@ -25,8 +25,8 @@ export type StarDataset = {
 
 export async function loadStarDataset(): Promise<StarDataset> {
   const candidates = [
-    path.join(process.cwd(), 'public', 'data', 'stars-mag-7_5.json'),
-    path.join(process.cwd(), 'poc', 'stars-mag-7_5.json'),
+    path.join(process.cwd(), 'public', 'data', 'stars-mag-6_5.json'),
+    path.join(process.cwd(), 'poc', 'stars-mag-6_5.json'),
   ];
 
   for (const filePath of candidates) {

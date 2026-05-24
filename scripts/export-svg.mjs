@@ -5,8 +5,8 @@ import { renderStarChartSvg } from '../src/chart/render-svg.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const inputCandidates = [
-  path.join(root, 'public', 'data', 'stars-mag-7_5.json'),
-  path.join(root, 'poc', 'stars-mag-7_5.json'),
+  path.join(root, 'public', 'data', 'stars-mag-6_5.json'),
+  path.join(root, 'poc', 'stars-mag-6_5.json'),
 ];
 const outputPath = path.join(root, 'exports', 'hyg-star-chart-24x12.svg');
 

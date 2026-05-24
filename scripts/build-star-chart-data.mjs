@@ -4,10 +4,10 @@ import readline from 'node:readline';
 
 const inputPath = new URL('../data/hyg/CURRENT/hyg_v42.csv.gz', import.meta.url);
 const outputPaths = [
-  new URL('../public/data/stars-mag-7_5.json', import.meta.url),
-  new URL('../poc/stars-mag-7_5.json', import.meta.url),
+  new URL('../public/data/stars-mag-6_5.json', import.meta.url),
+  new URL('../poc/stars-mag-6_5.json', import.meta.url),
 ];
-const magLimit = 7.5;
+const magLimit = 6.5;
 
 function parseCsvLine(line) {
   const cells = [];

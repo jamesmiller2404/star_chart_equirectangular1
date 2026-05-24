@@ -7,6 +7,7 @@ import {
   createDecTicks,
   createRaMinuteTicks,
   createRaTicks,
+  DEFAULT_MAG_LIMIT,
   DEFAULT_RADIUS_COMPRESSION,
   labelForStar,
   pointForStar,
@@ -137,7 +138,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
     <>
       <div className="meta-row">
         <span className="meta-pill">{dataset ? `${dataset.count.toLocaleString()} stars` : 'Loading stars...'}</span>
-        <span className="meta-pill">Magnitude &lt;= 7.5</span>
+        <span className="meta-pill">Magnitude &lt;= {DEFAULT_MAG_LIMIT}</span>
         <span className="meta-pill">RA 0h to 24h right-to-left</span>
         {error ? <span className="meta-pill">{error}</span> : null}
       </div>
@@ -185,16 +186,16 @@ function RadiusCurveGraph({ compression }: { compression: number }) {
   const width = 240;
   const height = 88;
   const padding = 12;
-  const magnitudes = [-1.5, 0, 2, 4, 6, 7.5];
+  const magnitudes = [-1.5, 0, 2, 4, 6, DEFAULT_MAG_LIMIT];
   const maxLinearRadius = starRadiusForMagnitude(-1.5, 0);
   const points = Array.from({ length: 80 }, (_, index) => {
-    const magnitude = -1.5 + (index / 79) * 9;
+    const magnitude = -1.5 + (index / 79) * (DEFAULT_MAG_LIMIT + 1.5);
     const x = padding + (index / 79) * (width - padding * 2);
     const y = height - padding - (starRadiusForMagnitude(magnitude, compression) / maxLinearRadius) * (height - padding * 2);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
   }).join(' ');
   const linearPoints = Array.from({ length: 24 }, (_, index) => {
-    const magnitude = -1.5 + (index / 23) * 9;
+    const magnitude = -1.5 + (index / 23) * (DEFAULT_MAG_LIMIT + 1.5);
     const x = padding + (index / 23) * (width - padding * 2);
     const y = height - padding - (starRadiusForMagnitude(magnitude, 0) / maxLinearRadius) * (height - padding * 2);
     return `${x.toFixed(2)},${y.toFixed(2)}`;
@@ -207,7 +208,7 @@ function RadiusCurveGraph({ compression }: { compression: number }) {
       <polyline className="radius-curve-linear" points={linearPoints} />
       <polyline className="radius-curve-active" points={points} />
       {magnitudes.map((magnitude) => {
-        const x = padding + ((magnitude + 1.5) / 9) * (width - padding * 2);
+        const x = padding + ((magnitude + 1.5) / (DEFAULT_MAG_LIMIT + 1.5)) * (width - padding * 2);
         const y = height - padding - (starRadiusForMagnitude(magnitude, compression) / maxLinearRadius) * (height - padding * 2);
         return <circle key={magnitude} cx={x} cy={y} r="2.5" />;
       })}

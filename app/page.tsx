@@ -17,7 +17,7 @@ export default function HomePage() {
         </nav>
       </header>
 
-      <StarChartCanvas dataUrl="/data/stars-mag-7_5.json" />
+      <StarChartCanvas dataUrl="/data/stars-mag-6_5.json" />
     </main>
   );
 }

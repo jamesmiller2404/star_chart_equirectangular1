@@ -128,7 +128,7 @@
         <h1>HYG Star Chart POC</h1>
         <div class="meta">
           <span id="count">Loading stars...</span>
-          <span>Magnitude <= 7.5</span>
+          <span>Magnitude <= 6.5</span>
           <span>2:1 RA/Dec chart</span>
         </div>
       </header>
@@ -149,7 +149,7 @@
       const tooltip = document.querySelector('#tooltip');
       const count = document.querySelector('#count');
       const context = canvas.getContext('2d');
-      const response = await fetch('./stars-mag-7_5.json');
+      const response = await fetch('./stars-mag-6_5.json');
       const dataset = await response.json();
       const stars = dataset.stars;
       const hoverTargets = [];
@@ -170,10 +170,9 @@
       }
 
       function radiusForStar(star, scale = 1) {
-        const minimumRadius = 0.65;
-        const linearRadius = Math.max(minimumRadius, (8 - star.mag) * 0.78);
-        const compression = 0.75;
-        return (minimumRadius + Math.log1p((linearRadius - minimumRadius) * compression) / compression) * scale;
+        const linearRadius = Math.max(0.65, (8 - star.mag) * 0.78);
+        const compression = 2.5;
+        return (Math.log1p(linearRadius * compression) / compression) * scale;
       }
 
       function drawGrid(width, height, padding) {
@@ -259,7 +258,7 @@
 
           context.beginPath();
           context.fillStyle = colorForStar(star);
-          context.globalAlpha = Math.min(1, 0.32 + (7.5 - star.mag) / 5.5);
+          context.globalAlpha = Math.min(1, 0.32 + (6.5 - star.mag) / 5.5);
           context.arc(point.x, point.y, radius, 0, Math.PI * 2);
           context.fill();
 
