@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
+  CONSTELLATION_LINE_WIDTH_PT,
   constellationLineSegments,
   createHipStarMap,
   createDecTickMarks,
@@ -78,7 +79,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       context.fillRect(0, 0, width, height);
 
       drawGrid(context, width, height, padding);
-      drawConstellationLines(context, dataset, width, height, padding);
+      drawConstellationLines(context, dataset, width, height, padding, dpr);
 
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
@@ -231,19 +232,21 @@ function drawConstellationLines(
   width: number,
   height: number,
   padding: number,
+  dpr: number,
 ) {
   if (!dataset.constellations?.lines?.length) return;
 
   const starsByHip = createHipStarMap(dataset.stars);
+  const cssPixelsPerPoint = 96 / 72;
 
   context.save();
   context.strokeStyle = `rgba(184, 184, 184, ${CONSTELLATION_LINE_OPACITY})`;
+  context.lineWidth = CONSTELLATION_LINE_WIDTH_PT * cssPixelsPerPoint * dpr;
   context.lineCap = 'round';
   context.lineJoin = 'round';
 
   for (const constellation of dataset.constellations.lines) {
     for (const path of constellation.paths) {
-      context.lineWidth = path.style === 'bold' ? 2.4 : path.style === 'thin' ? 1.1 : 1.6;
       context.beginPath();
 
       for (const [start, end] of constellationLineSegments(path, starsByHip, width, height, padding)) {

@@ -1,6 +1,7 @@
 import {
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
+  CONSTELLATION_LINE_WIDTH_PT,
   constellationLineSegments,
   createHipStarMap,
   createDecTickMarks,
@@ -10,6 +11,7 @@ import {
   DEFAULT_CHART,
   DIM_STAR_OPACITY,
   escapeXml,
+  GRID_LABEL_OPACITY,
   GRID_OPACITY,
   labelForStar,
   MIN_STAR_RADIUS,
@@ -31,7 +33,7 @@ function number(value) {
 
 function renderGrid(width, height, padding) {
   const lines = [
-    `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
   ];
 
   for (const tick of createRaMinuteTicks(5)) {
@@ -46,8 +48,6 @@ function renderGrid(width, height, padding) {
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
     lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${height - padding}" stroke-opacity="${GRID_OPACITY}" />`);
-    lines.push(`    <text x="${number(x)}" y="${padding - 20}" text-anchor="middle">${hour}h</text>`);
-    lines.push(`    <text x="${number(x)}" y="${height - padding + 30}" text-anchor="middle">${hour}h</text>`);
   }
 
   for (const tick of createDecTickMarks(5)) {
@@ -61,6 +61,25 @@ function renderGrid(width, height, padding) {
   for (const dec of createDecTicks(10)) {
     const y = padding + ((90 - dec) / 180) * (height - padding * 2);
     lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${width - padding}" y2="${number(y)}" stroke-opacity="${GRID_OPACITY}" />`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderGridLabels(width, height, padding) {
+  const lines = [
+    `  <g id="ra-dec-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+  ];
+
+  for (const hour of createRaTicks(1)) {
+    const x = padding + ((24 - hour) / 24) * (width - padding * 2);
+    lines.push(`    <text x="${number(x)}" y="${padding - 20}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(x)}" y="${height - padding + 30}" text-anchor="middle">${hour}h</text>`);
+  }
+
+  for (const dec of createDecTicks(10)) {
+    const y = padding + ((90 - dec) / 180) * (height - padding * 2);
     lines.push(`    <text x="${padding - 12}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
     lines.push(`    <text x="${width - padding + 12}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
   }
@@ -98,11 +117,9 @@ function renderConstellationLines(dataset) {
     lines.push(`    <g id="constellation-${escapeXml(constellation.iau)}" data-name="${escapeXml(constellation.name)}">`);
 
     for (const path of constellation.paths) {
-      const strokeWidth = path.style === 'bold' ? 2.4 : path.style === 'thin' ? 1.1 : 1.6;
-
       for (const [start, end] of constellationLineSegments(path, starsByHip)) {
         lines.push(
-          `      <line x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" stroke-width="${strokeWidth}" />`,
+          `      <line x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
         );
       }
     }
@@ -149,6 +166,7 @@ export function renderStarChartSvg(dataset, options = {}) {
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
     renderGrid(width, height, padding),
+    renderGridLabels(width, height, padding),
     renderConstellationLines(dataset),
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
     renderStars('stars-bright', brightStars, 1.05),
