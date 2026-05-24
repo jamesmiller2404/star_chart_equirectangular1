@@ -7,10 +7,12 @@ import {
   createDecTicks,
   createRaMinuteTicks,
   createRaTicks,
+  DEFAULT_RADIUS_COMPRESSION,
   labelForStar,
   pointForStar,
   starOpacity,
   starRadius,
+  starRadiusForMagnitude,
 } from '@/src/chart/chart-model.mjs';
 import type { StarDataset, StarRecord } from '@/src/data/load-stars';
 
@@ -27,6 +29,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
   const hoverTargets = useRef<HoverTarget[]>([]);
   const [dataset, setDataset] = useState<StarDataset | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [radiusCompression, setRadiusCompression] = useState(DEFAULT_RADIUS_COMPRESSION);
 
   useEffect(() => {
     let cancelled = false;
@@ -74,7 +77,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
         const point = pointForStar(star, width, height, padding);
-        const radius = starRadius(star, dpr);
+        const radius = starRadius(star, dpr, radiusCompression);
 
         context.beginPath();
         context.fillStyle = colorForStar(star);
@@ -97,7 +100,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
     draw();
     window.addEventListener('resize', draw);
     return () => window.removeEventListener('resize', draw);
-  }, [dataset]);
+  }, [dataset, radiusCompression]);
 
   function showNearest(event: React.MouseEvent<HTMLCanvasElement>) {
     const canvas = canvasRef.current;
@@ -139,6 +142,25 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
         {error ? <span className="meta-pill">{error}</span> : null}
       </div>
 
+      <section className="radius-control" aria-label="Star radius curve controls">
+        <div className="radius-slider">
+          <label htmlFor="radius-compression">Radius curve</label>
+          <div className="range-row">
+            <input
+              id="radius-compression"
+              type="range"
+              min="0"
+              max="3"
+              step="0.01"
+              value={radiusCompression}
+              onChange={(event) => setRadiusCompression(Number(event.target.value))}
+            />
+            <output htmlFor="radius-compression">{radiusCompression.toFixed(2)}</output>
+          </div>
+        </div>
+        <RadiusCurveGraph compression={radiusCompression} />
+      </section>
+
       <div className="chart-frame">
         <canvas
           ref={canvasRef}
@@ -156,6 +178,40 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
         <span>Data: HYG v4.2, CC-BY-SA 4.0.</span>
       </footer>
     </>
+  );
+}
+
+function RadiusCurveGraph({ compression }: { compression: number }) {
+  const width = 240;
+  const height = 88;
+  const padding = 12;
+  const magnitudes = [-1.5, 0, 2, 4, 6, 7.5];
+  const maxLinearRadius = starRadiusForMagnitude(-1.5, 0);
+  const points = Array.from({ length: 80 }, (_, index) => {
+    const magnitude = -1.5 + (index / 79) * 9;
+    const x = padding + (index / 79) * (width - padding * 2);
+    const y = height - padding - (starRadiusForMagnitude(magnitude, compression) / maxLinearRadius) * (height - padding * 2);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+  const linearPoints = Array.from({ length: 24 }, (_, index) => {
+    const magnitude = -1.5 + (index / 23) * 9;
+    const x = padding + (index / 23) * (width - padding * 2);
+    const y = height - padding - (starRadiusForMagnitude(magnitude, 0) / maxLinearRadius) * (height - padding * 2);
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  }).join(' ');
+
+  return (
+    <svg className="radius-curve" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Radius curve graph">
+      <line x1={padding} y1={height - padding} x2={width - padding} y2={height - padding} />
+      <line x1={padding} y1={padding} x2={padding} y2={height - padding} />
+      <polyline className="radius-curve-linear" points={linearPoints} />
+      <polyline className="radius-curve-active" points={points} />
+      {magnitudes.map((magnitude) => {
+        const x = padding + ((magnitude + 1.5) / 9) * (width - padding * 2);
+        const y = height - padding - (starRadiusForMagnitude(magnitude, compression) / maxLinearRadius) * (height - padding * 2);
+        return <circle key={magnitude} cx={x} cy={y} r="2.5" />;
+      })}
+    </svg>
   );
 }
 

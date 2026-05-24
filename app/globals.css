@@ -105,6 +105,83 @@ select {
   color: var(--muted);
 }
 
+.radius-control {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 240px;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.radius-slider label {
+  display: block;
+  margin-bottom: 7px;
+  color: var(--text);
+  font-weight: 650;
+}
+
+.range-row {
+  display: grid;
+  grid-template-columns: 1fr 54px;
+  align-items: center;
+  gap: 10px;
+}
+
+.range-row input {
+  width: 100%;
+  accent-color: var(--gold);
+}
+
+.range-row output {
+  min-width: 54px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 7px;
+  background: var(--surface-2);
+  color: var(--gold);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.radius-curve {
+  display: block;
+  width: 100%;
+  height: 88px;
+  color: var(--line-strong);
+}
+
+.radius-curve line {
+  stroke: currentColor;
+  stroke-width: 1;
+}
+
+.radius-curve polyline {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.radius-curve-linear {
+  stroke: var(--line-strong);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.radius-curve-active {
+  stroke: var(--gold);
+  stroke-width: 2.5;
+}
+
+.radius-curve circle {
+  fill: var(--text);
+  stroke: var(--bg);
+  stroke-width: 1;
+}
+
 .chart-frame {
   position: relative;
   width: 100%;
@@ -181,5 +258,9 @@ select {
 
   .chart-frame {
     min-height: 280px;
+  }
+
+  .radius-control {
+    grid-template-columns: 1fr;
   }
 }
