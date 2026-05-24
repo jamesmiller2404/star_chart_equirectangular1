@@ -8,7 +8,10 @@ const inputCandidates = [
   path.join(root, 'public', 'data', 'stars-mag-6_5.json'),
   path.join(root, 'poc', 'stars-mag-6_5.json'),
 ];
-const outputPath = path.join(root, 'exports', 'hyg-star-chart-24x12.svg');
+const outputPaths = [
+  path.join(root, 'exports', 'hyg-star-chart-24x12.svg'),
+  path.join(root, 'exports', 'hyg-star-chart-24x24.svg'),
+];
 
 async function readDataset() {
   for (const filePath of inputCandidates) {
@@ -26,10 +29,12 @@ async function readDataset() {
 const dataset = await readDataset();
 const { svg, labelCount } = renderStarChartSvg(dataset, { xmlDeclaration: true });
 
-await fs.mkdir(path.dirname(outputPath), { recursive: true });
-await fs.writeFile(outputPath, svg, 'utf8');
+for (const outputPath of outputPaths) {
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, svg, 'utf8');
+  console.log(`Wrote ${outputPath}`);
+}
 
-console.log(`Wrote ${outputPath}`);
 console.log(`SVG contains ${dataset.count} stars and ${labelCount} editable labels.`);
 if (dataset.constellations) {
   console.log(`SVG contains ${dataset.constellations.count} constellation line groups.`);

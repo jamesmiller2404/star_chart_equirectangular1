@@ -1,6 +1,10 @@
 export const PRINT_CHART = {
   widthIn: 24,
-  heightIn: 12,
+  heightIn: 24,
+  chartWidthIn: 24,
+  chartHeightIn: 12,
+  chartOffsetXIn: 0,
+  chartOffsetYIn: 12,
   unitsPerIn: 100,
   padding: 70,
   background: '#05070b',
@@ -13,8 +17,10 @@ export const PRINT_CHART = {
 };
 
 export const DEFAULT_CHART = {
-  width: PRINT_CHART.widthIn * PRINT_CHART.unitsPerIn,
-  height: PRINT_CHART.heightIn * PRINT_CHART.unitsPerIn,
+  width: PRINT_CHART.chartWidthIn * PRINT_CHART.unitsPerIn,
+  height: PRINT_CHART.chartHeightIn * PRINT_CHART.unitsPerIn,
+  x: PRINT_CHART.chartOffsetXIn * PRINT_CHART.unitsPerIn,
+  y: PRINT_CHART.chartOffsetYIn * PRINT_CHART.unitsPerIn,
   padding: PRINT_CHART.padding,
 };
 

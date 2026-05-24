@@ -148,8 +148,12 @@ function renderLabels(stars) {
 }
 
 export function renderStarChartSvg(dataset, options = {}) {
+  const documentWidth = PRINT_CHART.widthIn * PRINT_CHART.unitsPerIn;
+  const documentHeight = PRINT_CHART.heightIn * PRINT_CHART.unitsPerIn;
   const width = DEFAULT_CHART.width;
   const height = DEFAULT_CHART.height;
+  const chartX = DEFAULT_CHART.x;
+  const chartY = DEFAULT_CHART.y;
   const padding = DEFAULT_CHART.padding;
   const brightStars = dataset.stars.filter((star) => star.mag <= 4.2);
   const dimStars = dataset.stars.filter((star) => star.mag > 4.2);
@@ -159,10 +163,17 @@ export function renderStarChartSvg(dataset, options = {}) {
   if (options.xmlDeclaration) parts.push('<?xml version="1.0" encoding="UTF-8"?>');
 
   parts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${PRINT_CHART.widthIn}in" height="${PRINT_CHART.heightIn}in" viewBox="0 0 ${width} ${height}" role="img" aria-label="HYG v4.2 all-sky star chart">`,
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${PRINT_CHART.widthIn}in" height="${PRINT_CHART.heightIn}in" viewBox="0 0 ${documentWidth} ${documentHeight}" role="img" aria-label="HYG v4.2 all-sky star chart">`,
     '  <title>HYG Star Chart</title>',
-    `  <desc>HYG v4.2 star chart, magnitude &lt;= ${dataset.magLimit}, generated for Illustrator editing.</desc>`,
+    `  <desc>HYG v4.2 star chart, magnitude &lt;= ${dataset.magLimit}, generated for Illustrator editing. The current equirectangular chart occupies the lower 24 x 12 inch portion; the upper 24 x 12 inch portion is reserved for additional data and smaller charts.</desc>`,
     '  <g id="background">',
+    `    <rect width="${documentWidth}" height="${documentHeight}" fill="${PRINT_CHART.background}" />`,
+    '  </g>',
+    '  <g id="top-data-area" data-purpose="Reserved for additional data and smaller charts">',
+    `    <rect x="0" y="0" width="${documentWidth}" height="${chartY}" fill="none" />`,
+    '  </g>',
+    `  <g id="equirectangular-star-chart" transform="translate(${chartX} ${chartY})">`,
+    '  <g id="chart-background">',
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
     renderGrid(width, height, padding),
@@ -176,6 +187,7 @@ export function renderStarChartSvg(dataset, options = {}) {
     '  </g>',
     `  <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
     `    <text x="${padding}" y="${height - 24}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / ${dataset.count.toLocaleString()} stars</text>`,
+    '  </g>',
     '  </g>',
     '</svg>',
     '',
