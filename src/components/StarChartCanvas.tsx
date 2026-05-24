@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   colorForStar,
+  CONSTELLATION_LINE_OPACITY,
   constellationLineSegments,
   createHipStarMap,
   createDecTickMarks,
@@ -11,6 +12,8 @@ import {
   createRaTicks,
   DEFAULT_MAG_LIMIT,
   DEFAULT_RADIUS_COMPRESSION,
+  DIM_STAR_OPACITY,
+  GRID_OPACITY,
   labelForStar,
   pointForStar,
   starRadius,
@@ -84,12 +87,14 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
         const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
         context.beginPath();
+        context.globalAlpha = star.mag > 4.2 ? DIM_STAR_OPACITY : 1;
         context.fillStyle = colorForStar(star);
         context.strokeStyle = '#05070b';
         context.lineWidth = outline;
         context.arc(point.x, point.y, radius, 0, Math.PI * 2);
         context.fill();
         context.stroke();
+        context.globalAlpha = 1;
 
         if (star.mag <= 4.2 || star.proper) {
           hoverTargets.current.push({
@@ -232,7 +237,7 @@ function drawConstellationLines(
   const starsByHip = createHipStarMap(dataset.stars);
 
   context.save();
-  context.strokeStyle = 'rgba(241, 196, 95, 0.46)';
+  context.strokeStyle = `rgba(184, 184, 184, ${CONSTELLATION_LINE_OPACITY})`;
   context.lineCap = 'round';
   context.lineJoin = 'round';
 
@@ -254,7 +259,7 @@ function drawConstellationLines(
 }
 
 function drawGrid(context: CanvasRenderingContext2D, width: number, height: number, padding: number) {
-  context.strokeStyle = 'rgba(114, 130, 151, 0.34)';
+  context.strokeStyle = `rgba(114, 130, 151, ${GRID_OPACITY})`;
   context.fillStyle = 'rgba(210, 220, 235, 0.78)';
   context.lineWidth = 1;
   context.font = `${Math.max(11, width / 120)}px system-ui, sans-serif`;
@@ -265,7 +270,7 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     const tickLength = tick.isMedium ? 12 : 6;
 
     context.beginPath();
-    context.strokeStyle = tick.isMedium ? 'rgba(114, 130, 151, 0.48)' : 'rgba(114, 130, 151, 0.3)';
+    context.strokeStyle = tick.isMedium ? `rgba(114, 130, 151, ${GRID_OPACITY})` : 'rgba(114, 130, 151, 0.3)';
     context.moveTo(x, padding);
     context.lineTo(x, padding + tickLength);
     context.moveTo(x, height - padding);
@@ -273,7 +278,7 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.stroke();
   }
 
-  context.strokeStyle = 'rgba(114, 130, 151, 0.38)';
+  context.strokeStyle = `rgba(114, 130, 151, ${GRID_OPACITY})`;
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
     context.beginPath();
@@ -281,6 +286,8 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.lineTo(x, height - padding);
     context.stroke();
     context.textAlign = 'center';
+    context.textBaseline = 'bottom';
+    context.fillText(`${hour}h`, x, padding - 8);
     context.textBaseline = 'top';
     context.fillText(`${hour}h`, x, height - padding + 8);
   }
@@ -299,7 +306,7 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.stroke();
   }
 
-  context.strokeStyle = 'rgba(114, 130, 151, 0.34)';
+  context.strokeStyle = `rgba(114, 130, 151, ${GRID_OPACITY})`;
   for (const dec of createDecTicks(10)) {
     const y = padding + ((90 - dec) / 180) * (height - padding * 2);
     context.beginPath();
@@ -309,5 +316,7 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.textAlign = 'right';
     context.textBaseline = 'middle';
     context.fillText(`${dec > 0 ? '+' : ''}${dec}`, padding - 8, y);
+    context.textAlign = 'left';
+    context.fillText(`${dec > 0 ? '+' : ''}${dec}`, width - padding + 8, y);
   }
 }

@@ -1,5 +1,6 @@
 import {
   colorForStar,
+  CONSTELLATION_LINE_OPACITY,
   constellationLineSegments,
   createHipStarMap,
   createDecTickMarks,
@@ -7,7 +8,9 @@ import {
   createRaMinuteTicks,
   createRaTicks,
   DEFAULT_CHART,
+  DIM_STAR_OPACITY,
   escapeXml,
+  GRID_OPACITY,
   labelForStar,
   MIN_STAR_RADIUS,
   pointForStar,
@@ -28,21 +31,22 @@ function number(value) {
 
 function renderGrid(width, height, padding) {
   const lines = [
-    `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="0.62" stroke-width="1" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
   ];
 
   for (const tick of createRaMinuteTicks(5)) {
     if (tick.isHour) continue;
     const x = padding + ((24 - tick.hour) / 24) * (width - padding * 2);
     const tickLength = tick.isMedium ? 18 : 9;
-    const opacity = tick.isMedium ? 0.48 : 0.3;
+    const opacity = tick.isMedium ? GRID_OPACITY : 0.3;
     lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${padding + tickLength}" stroke-opacity="${opacity}" />`);
     lines.push(`    <line x1="${number(x)}" y1="${height - padding}" x2="${number(x)}" y2="${height - padding - tickLength}" stroke-opacity="${opacity}" />`);
   }
 
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
-    lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${height - padding}" stroke-opacity="0.62" />`);
+    lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${height - padding}" stroke-opacity="${GRID_OPACITY}" />`);
+    lines.push(`    <text x="${number(x)}" y="${padding - 20}" text-anchor="middle">${hour}h</text>`);
     lines.push(`    <text x="${number(x)}" y="${height - padding + 30}" text-anchor="middle">${hour}h</text>`);
   }
 
@@ -56,16 +60,18 @@ function renderGrid(width, height, padding) {
 
   for (const dec of createDecTicks(10)) {
     const y = padding + ((90 - dec) / 180) * (height - padding * 2);
-    lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${width - padding}" y2="${number(y)}" stroke-opacity="0.62" />`);
+    lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${width - padding}" y2="${number(y)}" stroke-opacity="${GRID_OPACITY}" />`);
     lines.push(`    <text x="${padding - 12}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
+    lines.push(`    <text x="${width - padding + 12}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
   }
 
   lines.push('  </g>');
   return lines.join('\n');
 }
 
-function renderStars(id, stars, scale) {
-  const lines = [`  <g id="${id}">`];
+function renderStars(id, stars, scale, opacity = 1) {
+  const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
+  const lines = [`  <g id="${id}"${opacityAttribute}>`];
 
   for (const star of stars) {
     const point = pointForStar(star);
@@ -85,7 +91,7 @@ function renderConstellationLines(dataset) {
 
   const starsByHip = createHipStarMap(dataset.stars);
   const lines = [
-    `  <g id="constellation-lines" fill="none" stroke="${PRINT_CHART.accent}" stroke-opacity="0.46" stroke-linecap="round" stroke-linejoin="round">`,
+    `  <g id="constellation-lines" fill="none" stroke="${PRINT_CHART.constellationLine}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-linecap="round" stroke-linejoin="round">`,
   ];
 
   for (const constellation of dataset.constellations.lines) {
@@ -144,7 +150,7 @@ export function renderStarChartSvg(dataset, options = {}) {
     '  </g>',
     renderGrid(width, height, padding),
     renderConstellationLines(dataset),
-    renderStars('stars-dim', dimStars, 1),
+    renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
     renderStars('stars-bright', brightStars, 1.05),
     renderLabels(labels),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,

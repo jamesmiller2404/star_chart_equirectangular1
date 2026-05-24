@@ -6,6 +6,7 @@ export const PRINT_CHART = {
   background: '#05070b',
   frame: '#aeb8c7',
   grid: '#526176',
+  constellationLine: '#b8b8b8',
   text: '#eef3f8',
   mutedText: '#aeb8c7',
   accent: '#f1c45f',
@@ -124,6 +125,9 @@ export function colorForStar(star) {
 }
 
 export const DEFAULT_MAG_LIMIT = 6.5;
+export const DIM_STAR_OPACITY = 0.5;
+export const GRID_OPACITY = 0.35;
+export const CONSTELLATION_LINE_OPACITY = 0.5;
 export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
 export const DEFAULT_RADIUS_COMPRESSION = 1.2;
