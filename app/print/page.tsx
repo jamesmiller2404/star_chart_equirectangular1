@@ -26,6 +26,7 @@ export default async function PrintPage() {
 
       <div className="meta-row">
         <span className="meta-pill">{dataset.count.toLocaleString()} stars</span>
+        {dataset.constellations ? <span className="meta-pill">{dataset.constellations.count} constellations</span> : null}
         <span className="meta-pill">Editable SVG text labels</span>
         <span className="meta-pill">Layered groups for Illustrator</span>
       </div>

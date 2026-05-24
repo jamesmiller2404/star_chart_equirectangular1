@@ -170,9 +170,21 @@
       }
 
       function radiusForStar(star, scale = 1) {
-        const linearRadius = Math.max(0.65, (8 - star.mag) * 0.78);
-        const compression = 2.5;
-        return (Math.log1p(linearRadius * compression) / compression) * scale;
+        const minRadius = 0.75;
+        const maxRadius = 2;
+        const exponent = 1.2;
+        const tailPortion = 0.2;
+        const tailExponent = 1 + Math.min(1.25, Math.max(0, exponent * 0.65));
+        let brightness = Math.min(1, Math.max(0, (6.5 - star.mag) / 8));
+
+        if (brightness < tailPortion) {
+          brightness = tailPortion * (brightness / tailPortion) ** tailExponent;
+        } else if (brightness > 1 - tailPortion) {
+          brightness = 1 - tailPortion * ((1 - brightness) / tailPortion) ** tailExponent;
+        }
+
+        const curvedBrightness = (Math.exp(brightness * exponent) - 1) / (Math.exp(exponent) - 1);
+        return (minRadius + curvedBrightness * (maxRadius - minRadius)) * scale;
       }
 
       function drawGrid(width, height, padding) {
@@ -255,19 +267,21 @@
           const star = stars[i];
           const point = pointForStar(star, width, height, padding);
           const radius = radiusForStar(star, dpr);
+          const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
           context.beginPath();
           context.fillStyle = colorForStar(star);
-          context.globalAlpha = Math.min(1, 0.32 + (6.5 - star.mag) / 5.5);
+          context.strokeStyle = '#05070b';
+          context.lineWidth = outline;
           context.arc(point.x, point.y, radius, 0, Math.PI * 2);
           context.fill();
+          context.stroke();
 
           if (star.mag <= 4.2 || star.proper) {
             hoverTargets.push({ ...point, radius: Math.max(radius + 6 * dpr, 8 * dpr), star });
           }
         }
 
-        context.globalAlpha = 1;
       }
 
       function showNearest(event) {

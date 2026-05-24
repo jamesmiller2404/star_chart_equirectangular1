@@ -1,5 +1,7 @@
 import {
   colorForStar,
+  constellationLineSegments,
+  createHipStarMap,
   createDecTickMarks,
   createDecTicks,
   createRaMinuteTicks,
@@ -7,12 +9,18 @@ import {
   DEFAULT_CHART,
   escapeXml,
   labelForStar,
+  MIN_STAR_RADIUS,
   pointForStar,
   PRINT_CHART,
   shouldLabelStar,
-  starOpacity,
   starRadius,
 } from './chart-model.mjs';
+
+const ILLUSTRATOR_PX_PER_IN = 72;
+const TARGET_MIN_STAR_DIAMETER_PX = 0.75;
+const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_PX_PER_IN;
+const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
+const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 
 function number(value) {
   return Math.round(value * 100) / 100;
@@ -61,9 +69,39 @@ function renderStars(id, stars, scale) {
 
   for (const star of stars) {
     const point = pointForStar(star);
+    const radius = starRadius(star, scale) * SVG_RADIUS_SCALE;
+    const strokeWidth = Math.max(0.08, Math.min(0.18, radius * 0.14));
     lines.push(
-      `    <circle id="star-${star.id}" cx="${number(point.x)}" cy="${number(point.y)}" r="${number(starRadius(star, scale))}" fill="${colorForStar(star)}" opacity="${number(starOpacity(star))}" />`,
+      `    <circle id="star-${star.id}" cx="${number(point.x)}" cy="${number(point.y)}" r="${number(radius)}" fill="${colorForStar(star)}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`,
     );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderConstellationLines(dataset) {
+  if (!dataset.constellations?.lines?.length) return '';
+
+  const starsByHip = createHipStarMap(dataset.stars);
+  const lines = [
+    `  <g id="constellation-lines" fill="none" stroke="${PRINT_CHART.accent}" stroke-opacity="0.46" stroke-linecap="round" stroke-linejoin="round">`,
+  ];
+
+  for (const constellation of dataset.constellations.lines) {
+    lines.push(`    <g id="constellation-${escapeXml(constellation.iau)}" data-name="${escapeXml(constellation.name)}">`);
+
+    for (const path of constellation.paths) {
+      const strokeWidth = path.style === 'bold' ? 2.4 : path.style === 'thin' ? 1.1 : 1.6;
+
+      for (const [start, end] of constellationLineSegments(path, starsByHip)) {
+        lines.push(
+          `      <line x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" stroke-width="${strokeWidth}" />`,
+        );
+      }
+    }
+
+    lines.push('    </g>');
   }
 
   lines.push('  </g>');
@@ -105,6 +143,7 @@ export function renderStarChartSvg(dataset, options = {}) {
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
     renderGrid(width, height, padding),
+    renderConstellationLines(dataset),
     renderStars('stars-dim', dimStars, 1),
     renderStars('stars-bright', brightStars, 1.05),
     renderLabels(labels),

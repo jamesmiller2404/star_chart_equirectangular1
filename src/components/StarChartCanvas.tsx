@@ -3,6 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   colorForStar,
+  constellationLineSegments,
+  createHipStarMap,
   createDecTickMarks,
   createDecTicks,
   createRaMinuteTicks,
@@ -11,7 +13,6 @@ import {
   DEFAULT_RADIUS_COMPRESSION,
   labelForStar,
   pointForStar,
-  starOpacity,
   starRadius,
   starRadiusForMagnitude,
 } from '@/src/chart/chart-model.mjs';
@@ -74,17 +75,21 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       context.fillRect(0, 0, width, height);
 
       drawGrid(context, width, height, padding);
+      drawConstellationLines(context, dataset, width, height, padding);
 
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
         const point = pointForStar(star, width, height, padding);
         const radius = starRadius(star, dpr, radiusCompression);
+        const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
         context.beginPath();
         context.fillStyle = colorForStar(star);
-        context.globalAlpha = starOpacity(star);
+        context.strokeStyle = '#05070b';
+        context.lineWidth = outline;
         context.arc(point.x, point.y, radius, 0, Math.PI * 2);
         context.fill();
+        context.stroke();
 
         if (star.mag <= 4.2 || star.proper) {
           hoverTargets.current.push({
@@ -94,8 +99,6 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
           });
         }
       }
-
-      context.globalAlpha = 1;
     }
 
     draw();
@@ -139,6 +142,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       <div className="meta-row">
         <span className="meta-pill">{dataset ? `${dataset.count.toLocaleString()} stars` : 'Loading stars...'}</span>
         <span className="meta-pill">Magnitude &lt;= {DEFAULT_MAG_LIMIT}</span>
+        {dataset?.constellations ? <span className="meta-pill">{dataset.constellations.count} constellations</span> : null}
         <span className="meta-pill">RA 0h to 24h right-to-left</span>
         {error ? <span className="meta-pill">{error}</span> : null}
       </div>
@@ -214,6 +218,39 @@ function RadiusCurveGraph({ compression }: { compression: number }) {
       })}
     </svg>
   );
+}
+
+function drawConstellationLines(
+  context: CanvasRenderingContext2D,
+  dataset: StarDataset,
+  width: number,
+  height: number,
+  padding: number,
+) {
+  if (!dataset.constellations?.lines?.length) return;
+
+  const starsByHip = createHipStarMap(dataset.stars);
+
+  context.save();
+  context.strokeStyle = 'rgba(241, 196, 95, 0.46)';
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+
+  for (const constellation of dataset.constellations.lines) {
+    for (const path of constellation.paths) {
+      context.lineWidth = path.style === 'bold' ? 2.4 : path.style === 'thin' ? 1.1 : 1.6;
+      context.beginPath();
+
+      for (const [start, end] of constellationLineSegments(path, starsByHip, width, height, padding)) {
+        context.moveTo(start.x, start.y);
+        context.lineTo(end.x, end.y);
+      }
+
+      context.stroke();
+    }
+  }
+
+  context.restore();
 }
 
 function drawGrid(context: CanvasRenderingContext2D, width: number, height: number, padding: number) {

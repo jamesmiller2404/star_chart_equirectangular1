@@ -31,3 +31,6 @@ await fs.writeFile(outputPath, svg, 'utf8');
 
 console.log(`Wrote ${outputPath}`);
 console.log(`SVG contains ${dataset.count} stars and ${labelCount} editable labels.`);
+if (dataset.constellations) {
+  console.log(`SVG contains ${dataset.constellations.count} constellation line groups.`);
+}

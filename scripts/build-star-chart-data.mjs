@@ -3,11 +3,30 @@ import zlib from 'node:zlib';
 import readline from 'node:readline';
 
 const inputPath = new URL('../data/hyg/CURRENT/hyg_v42.csv.gz', import.meta.url);
+const constellationInputPath = new URL('../data/constellations/stellarium-western-index.json', import.meta.url);
 const outputPaths = [
   new URL('../public/data/stars-mag-6_5.json', import.meta.url),
   new URL('../poc/stars-mag-6_5.json', import.meta.url),
 ];
 const magLimit = 6.5;
+
+const skyCulture = JSON.parse(await fs.promises.readFile(constellationInputPath, 'utf8'));
+const constellations = skyCulture.constellations.map((constellation) => ({
+  id: constellation.id,
+  iau: constellation.iau || constellation.id.split(' ').at(-1) || '',
+  name: constellation.common_name?.native || constellation.common_name?.english || constellation.iau || constellation.id,
+  englishName: constellation.common_name?.english || '',
+  paths: (constellation.lines || []).map((line) => {
+    const style = typeof line[0] === 'string' ? line[0] : 'normal';
+    return {
+      style,
+      hips: line.filter((item) => Number.isInteger(item)),
+    };
+  }),
+}));
+const constellationEndpointHips = new Set(
+  constellations.flatMap((constellation) => constellation.paths.flatMap((line) => line.hips)),
+);
 
 function parseCsvLine(line) {
   const cells = [];
@@ -62,14 +81,22 @@ for await (const line of reader) {
   const mag = asNumber(row.mag);
   const ra = asNumber(row.ra);
   const dec = asNumber(row.dec);
+  const hip = asNumber(row.hip);
   const proper = row.proper || '';
 
-  if (mag === null || ra === null || dec === null || mag > magLimit || Number(row.id) === 0 || proper === 'Sol') {
+  const isConstellationEndpoint = hip !== null && constellationEndpointHips.has(hip);
+
+  if (mag === null || ra === null || dec === null || Number(row.id) === 0 || proper === 'Sol') {
+    continue;
+  }
+
+  if (mag > magLimit && !isConstellationEndpoint) {
     continue;
   }
 
   stars.push({
     id: Number(row.id),
+    hip,
     ra,
     dec,
     mag,
@@ -87,9 +114,18 @@ const output = `${JSON.stringify({
     source: 'HYG v4.2 data/hyg/CURRENT/hyg_v42.csv.gz',
     license: 'CC-BY-SA 4.0',
     magLimit,
+    magnitudeLimitedCount: stars.filter((star) => star.mag <= magLimit).length,
+    constellationEndpointCount: stars.filter((star) => star.mag > magLimit && star.hip !== null && constellationEndpointHips.has(star.hip)).length,
     totalRows,
     count: stars.length,
     generatedAt: new Date().toISOString(),
+    constellations: {
+      source: 'Stellarium western sky culture data/constellations/stellarium-western-index.json',
+      license: 'CC BY-SA',
+      culture: skyCulture.id,
+      count: constellations.length,
+      lines: constellations,
+    },
     stars,
   })}\n`;
 
@@ -97,5 +133,5 @@ await Promise.all(outputPaths.map((outputPath) => fs.promises.writeFile(outputPa
 
 console.log(`Read ${totalRows} catalog rows.`);
 for (const outputPath of outputPaths) {
-  console.log(`Wrote ${stars.length} stars with mag <= ${magLimit} to ${outputPath.pathname}`);
+  console.log(`Wrote ${stars.length} stars and ${constellations.length} constellation line groups to ${outputPath.pathname}`);
 }

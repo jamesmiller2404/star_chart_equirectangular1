@@ -3,6 +3,7 @@ import path from 'node:path';
 
 export type StarRecord = {
   id: number;
+  hip: number | null;
   ra: number;
   dec: number;
   mag: number;
@@ -13,13 +14,37 @@ export type StarRecord = {
   ci: number | null;
 };
 
+export type ConstellationLinePath = {
+  style: string;
+  hips: number[];
+};
+
+export type ConstellationLine = {
+  id: string;
+  iau: string;
+  name: string;
+  englishName: string;
+  paths: ConstellationLinePath[];
+};
+
+export type ConstellationDataset = {
+  source: string;
+  license: string;
+  culture: string;
+  count: number;
+  lines: ConstellationLine[];
+};
+
 export type StarDataset = {
   source: string;
   license: string;
   magLimit: number;
+  magnitudeLimitedCount?: number;
+  constellationEndpointCount?: number;
   totalRows: number;
   count: number;
   generatedAt: string;
+  constellations?: ConstellationDataset;
   stars: StarRecord[];
 };
 
