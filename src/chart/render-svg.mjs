@@ -3,6 +3,8 @@ import {
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
+  CONSTELLATION_LABEL_OPACITY,
+  constellationLabelPosition,
   constellationLineSegments,
   createEclipticCoordinates,
   createHipStarMap,
@@ -566,6 +568,27 @@ function renderConstellationLines(dataset) {
   return lines.join('\n');
 }
 
+function renderConstellationLabels(dataset) {
+  if (!dataset.constellations?.lines?.length) return '';
+
+  const starsByHip = createHipStarMap(dataset.stars);
+  const lines = [
+    `  <g id="constellation-abbreviation-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${CONSTELLATION_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="9pt" font-weight="700" letter-spacing="0.6" text-anchor="middle">`,
+  ];
+
+  for (const constellation of dataset.constellations.lines) {
+    const point = constellationLabelPosition(constellation, starsByHip);
+    if (!point) continue;
+
+    lines.push(
+      `    <text id="constellation-label-${escapeXml(constellation.iau)}" x="${number(point.x)}" y="${number(point.y)}" data-name="${escapeXml(constellation.name)}">${escapeXml(constellation.iau)}</text>`,
+    );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
 function renderStarNameLabels(stars) {
   const lines = [
     `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
@@ -584,7 +607,7 @@ function renderStarNameLabels(stars) {
 
 function renderBayerDesignationLabels(stars) {
   const lines = [
-    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
+    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="7pt" font-style="italic">`,
   ];
 
   for (const star of stars) {
@@ -1182,8 +1205,9 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
     renderGridLabels(width, height, padding),
     renderCoordinateReferenceLines(width, height, padding),
     renderConstellationLines(dataset),
+    renderConstellationLabels(dataset),
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
-    renderStars('stars-bright', brightStars, 1.5),
+    renderStars('stars-bright', brightStars, 2.1),
     renderStarNameLabels(nameLabels),
     renderBayerDesignationLabels(bayerLabels),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,

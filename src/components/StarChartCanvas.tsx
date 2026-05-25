@@ -5,6 +5,8 @@ import {
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
+  CONSTELLATION_LABEL_OPACITY,
+  constellationLabelPosition,
   constellationLineSegments,
   createEclipticCoordinates,
   createHipStarMap,
@@ -84,11 +86,12 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       drawGrid(context, width, height, padding);
       drawCoordinateReferenceLines(context, width, height, padding, dpr);
       drawConstellationLines(context, dataset, width, height, padding, dpr);
+      drawConstellationLabels(context, dataset, width, height, padding, dpr);
 
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
         const point = pointForStar(star, width, height, padding);
-        const radius = starRadius(star, star.mag <= 4.2 ? dpr * 1.5 : dpr, radiusCompression);
+        const radius = starRadius(star, star.mag <= 4.2 ? dpr * 2.1 : dpr, radiusCompression);
         const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
         context.beginPath();
@@ -262,6 +265,33 @@ function drawConstellationLines(
 
       context.stroke();
     }
+  }
+
+  context.restore();
+}
+
+function drawConstellationLabels(
+  context: CanvasRenderingContext2D,
+  dataset: StarDataset,
+  width: number,
+  height: number,
+  padding: number,
+  dpr: number,
+) {
+  if (!dataset.constellations?.lines?.length) return;
+
+  const starsByHip = createHipStarMap(dataset.stars);
+
+  context.save();
+  context.fillStyle = `rgba(174, 184, 199, ${CONSTELLATION_LABEL_OPACITY})`;
+  context.font = `700 ${Math.max(10, 11 * dpr)}px system-ui, sans-serif`;
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+
+  for (const constellation of dataset.constellations.lines) {
+    const point = constellationLabelPosition(constellation, starsByHip, width, height, padding);
+    if (!point) continue;
+    context.fillText(constellation.iau, point.x, point.y);
   }
 
   context.restore();

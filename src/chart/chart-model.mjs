@@ -175,16 +175,52 @@ export function constellationLineSegments(path, starsByHip, width = DEFAULT_CHAR
   return segments;
 }
 
+export function constellationLabelPosition(constellation, starsByHip, width = DEFAULT_CHART.width, height = DEFAULT_CHART.height, padding = DEFAULT_CHART.padding) {
+  let weightedX = 0;
+  let weightedY = 0;
+  let totalWeight = 0;
+
+  for (const path of constellation.paths) {
+    for (const [start, end] of constellationLineSegments(path, starsByHip, width, height, padding)) {
+      const length = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+      weightedX += ((start.x + end.x) / 2) * length;
+      weightedY += ((start.y + end.y) / 2) * length;
+      totalWeight += length;
+    }
+  }
+
+  if (totalWeight > 0) {
+    return {
+      x: weightedX / totalWeight,
+      y: weightedY / totalWeight,
+    };
+  }
+
+  const points = constellation.paths
+    .flatMap((path) => path.hips)
+    .map((hip) => starsByHip.get(hip))
+    .filter(Boolean)
+    .map((star) => pointForStar(star, width, height, padding));
+
+  if (!points.length) return null;
+
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
 export function colorForStar(star) {
   return '#f2f2f2';
 }
 
 export const DEFAULT_MAG_LIMIT = 6.5;
-export const DIM_STAR_OPACITY = 0.5;
+export const DIM_STAR_OPACITY = 0.75;
 export const GRID_OPACITY = 0.35;
 export const GRID_LABEL_OPACITY = 0.6;
 export const CONSTELLATION_LINE_OPACITY = 0.5;
 export const CONSTELLATION_LINE_WIDTH_PT = 0.75;
+export const CONSTELLATION_LABEL_OPACITY = 0.72;
 export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
 export const DEFAULT_RADIUS_COMPRESSION = 1.2;
