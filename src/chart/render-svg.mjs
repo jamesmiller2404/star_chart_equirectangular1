@@ -50,6 +50,69 @@ export const PLEIADES_M45_BOUNDS = {
   },
 };
 
+export const LYRA_BOUNDS = {
+  raMin: 17,
+  raMax: 20 + 40 / 60,
+  decMin: 20,
+  decMax: 50,
+  magLimit: 7.5,
+  centerRa: 18 + 50 / 60,
+  centerDec: 35,
+  boundary: {
+    type: 'declination-trapezoid',
+    bottomRaMin: 17.771222732744608,
+    bottomRaMax: 19.895443933922056,
+    topRaMin: 17.2685304742529,
+    topRaMax: 20.398136192413766,
+  },
+  grid: {
+    raStepHours: 20 / 60,
+    decStepDegrees: 5,
+  },
+  labels: {
+    raStepHours: 20 / 60,
+    decStepDegrees: 5,
+  },
+  ticks: {
+    raStepHours: 5 / 60,
+    decStepDegrees: 1,
+    minPixelSpacing: 4,
+  },
+};
+
+function hasDeclinationTrapezoidBoundary(bounds) {
+  return bounds.boundary?.type === 'declination-trapezoid';
+}
+
+function boundaryTForDec(bounds, dec) {
+  return (dec - bounds.decMin) / (bounds.decMax - bounds.decMin);
+}
+
+function interpolateBoundaryValue(start, end, t) {
+  return start + (end - start) * t;
+}
+
+export function insetRaRangeAtDec(bounds, dec) {
+  if (!hasDeclinationTrapezoidBoundary(bounds)) {
+    return {
+      raMin: bounds.raMin,
+      raMax: bounds.raMax,
+    };
+  }
+
+  const t = boundaryTForDec(bounds, dec);
+  return {
+    raMin: interpolateBoundaryValue(bounds.boundary.bottomRaMin, bounds.boundary.topRaMin, t),
+    raMax: interpolateBoundaryValue(bounds.boundary.bottomRaMax, bounds.boundary.topRaMax, t),
+  };
+}
+
+export function isCoordinateInsideInsetBounds(bounds, ra, dec, mag = -Infinity) {
+  if (mag > bounds.magLimit || dec < bounds.decMin || dec > bounds.decMax) return false;
+  const range = insetRaRangeAtDec(bounds, dec);
+  return ra >= range.raMin && ra <= range.raMax;
+}
+
 export const SCORPIO_BOUNDS = {
   raMin: 15 + 40 / 60,
   raMax: 18,
@@ -67,6 +130,17 @@ const PLEIADES_INSET = {
   paddingRight: 36,
   paddingTop: 78,
   paddingBottom: 66,
+};
+
+const LYRA_INSET = {
+  x: 810,
+  y: 70,
+  width: 720,
+  height: 720,
+  paddingLeft: 76,
+  paddingRight: 76,
+  paddingTop: 78,
+  paddingBottom: 74,
 };
 
 const SCORPIO_INSET = {
@@ -101,6 +175,18 @@ export const INSET_STAR_CHARTS = {
     bounds: PLEIADES_M45_BOUNDS,
     inset: PLEIADES_INSET,
     projection: 'stereographic',
+  },
+  lyra: {
+    id: 'lyra',
+    aliases: ['lyr'],
+    title: 'Lyra',
+    layerName: 'Lyra Gaia DR3 inset',
+    outputFileName: 'lyra-inset.svg',
+    bounds: LYRA_BOUNDS,
+    inset: LYRA_INSET,
+    projection: 'stereographic',
+    catalogPriority: 'hyg-gaia',
+    sourceLabel: 'HYG v4.2 + Gaia DR3',
   },
 };
 
@@ -292,6 +378,18 @@ function formatDecLabel(dec) {
   return `${sign}${String(degrees).padStart(2, '0')}° ${String(minutes).padStart(2, '0')}'`;
 }
 
+function formatInsetBoundsSummary(bounds) {
+  if (!hasDeclinationTrapezoidBoundary(bounds)) {
+    return `RA ${formatRaLabel(bounds.raMin)} to ${formatRaLabel(bounds.raMax)} / Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}`;
+  }
+
+  return [
+    `bottom RA ${formatRaLabel(bounds.boundary.bottomRaMin)} to ${formatRaLabel(bounds.boundary.bottomRaMax)}`,
+    `top RA ${formatRaLabel(bounds.boundary.topRaMin)} to ${formatRaLabel(bounds.boundary.topRaMax)}`,
+    `Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}`,
+  ].join(' / ');
+}
+
 function ceilToStep(value, step) {
   return Math.ceil((value - 1e-9) / step) * step;
 }
@@ -348,6 +446,14 @@ function projectedBoundaryBounds(projectPlanePoint, bounds, sampleCount = 96) {
     maxX = Math.max(maxX, point.x);
     minY = Math.min(minY, point.y);
     maxY = Math.max(maxY, point.y);
+  }
+
+  if (hasDeclinationTrapezoidBoundary(bounds)) {
+    for (const coordinate of createInsetBoundaryCoordinates(bounds, sampleCount)) {
+      include(projectPlanePoint(coordinate.ra, coordinate.dec));
+    }
+
+    return { minX, maxX, minY, maxY };
   }
 
   for (let index = 0; index <= sampleCount; index += 1) {
@@ -470,33 +576,74 @@ function pathAttribute(points) {
 }
 
 function createInsetBoundaryPoints(bounds, projection, sampleCount = 96) {
+  return createInsetBoundaryCoordinates(bounds, sampleCount)
+    .map((coordinate) => projection.project(coordinate.ra, coordinate.dec))
+    .filter(Boolean);
+}
+
+function createInsetBoundaryCoordinates(bounds, sampleCount = 96) {
+  if (hasDeclinationTrapezoidBoundary(bounds)) {
+    const points = [];
+
+    for (let index = 0; index <= sampleCount; index += 1) {
+      const t = index / sampleCount;
+      const ra = bounds.boundary.topRaMax - (bounds.boundary.topRaMax - bounds.boundary.topRaMin) * t;
+      points.push({ ra, dec: bounds.decMax });
+    }
+
+    for (let index = 1; index <= sampleCount; index += 1) {
+      const t = index / sampleCount;
+      const dec = bounds.decMax - (bounds.decMax - bounds.decMin) * t;
+      points.push({ ra: insetRaRangeAtDec(bounds, dec).raMin, dec });
+    }
+
+    for (let index = 1; index <= sampleCount; index += 1) {
+      const t = index / sampleCount;
+      const ra = bounds.boundary.bottomRaMin + (bounds.boundary.bottomRaMax - bounds.boundary.bottomRaMin) * t;
+      points.push({ ra, dec: bounds.decMin });
+    }
+
+    for (let index = 1; index < sampleCount; index += 1) {
+      const t = index / sampleCount;
+      const dec = bounds.decMin + (bounds.decMax - bounds.decMin) * t;
+      points.push({ ra: insetRaRangeAtDec(bounds, dec).raMax, dec });
+    }
+
+    return points;
+  }
+
   const points = [];
-  const include = (point) => {
-    if (point) points.push(point);
-  };
 
   for (let index = 0; index <= sampleCount; index += 1) {
     const t = index / sampleCount;
-    const ra = bounds.raMax - (bounds.raMax - bounds.raMin) * t;
-    include(projection.project(ra, bounds.decMax));
+    points.push({
+      ra: bounds.raMax - (bounds.raMax - bounds.raMin) * t,
+      dec: bounds.decMax,
+    });
   }
 
   for (let index = 1; index <= sampleCount; index += 1) {
     const t = index / sampleCount;
-    const dec = bounds.decMax - (bounds.decMax - bounds.decMin) * t;
-    include(projection.project(bounds.raMin, dec));
+    points.push({
+      ra: bounds.raMin,
+      dec: bounds.decMax - (bounds.decMax - bounds.decMin) * t,
+    });
   }
 
   for (let index = 1; index <= sampleCount; index += 1) {
     const t = index / sampleCount;
-    const ra = bounds.raMin + (bounds.raMax - bounds.raMin) * t;
-    include(projection.project(ra, bounds.decMin));
+    points.push({
+      ra: bounds.raMin + (bounds.raMax - bounds.raMin) * t,
+      dec: bounds.decMin,
+    });
   }
 
   for (let index = 1; index < sampleCount; index += 1) {
     const t = index / sampleCount;
-    const dec = bounds.decMin + (bounds.decMax - bounds.decMin) * t;
-    include(projection.project(bounds.raMax, dec));
+    points.push({
+      ra: bounds.raMax,
+      dec: bounds.decMin + (bounds.decMax - bounds.decMin) * t,
+    });
   }
 
   return points;
@@ -547,10 +694,11 @@ function renderInsetGrid(idPrefix, inset, bounds, projection) {
   for (let dec = firstDecTick; dec <= lastDecTick + 1e-9; dec += decTickStep) {
     if (!isInteriorCoordinate(dec, bounds.decMin, bounds.decMax)) continue;
     const opacity = bounds.grid?.decStepDegrees ? GRID_OPACITY : Math.round(dec * 60) % 60 === 0 ? GRID_OPACITY : 0.18;
+    const raRange = insetRaRangeAtDec(bounds, dec);
     const points = sampleProjectedLine(
       projection,
-      { ra: bounds.raMin, dec },
-      { ra: bounds.raMax, dec },
+      { ra: raRange.raMin, dec },
+      { ra: raRange.raMax, dec },
     );
     lines.push(`      <polyline points="${pointsAttribute(points)}" stroke-opacity="${opacity}" />`);
   }
@@ -566,11 +714,12 @@ function renderInsetGrid(idPrefix, inset, bounds, projection) {
   let previousBottomRaTick = null;
   for (let ra = firstSmallRaTick; ra <= lastSmallRaTick + 1e-9; ra += smallRaTickStepHours) {
     if (bounds.grid?.raStepHours && hasInteriorGridLine(ra, bounds.raMin, bounds.raMax, bounds.grid.raStepHours)) continue;
-    const top = projection.project(ra, bounds.decMax);
-    const bottom = projection.project(ra, bounds.decMin);
-    if (!top || !bottom) continue;
-    const drawTopTick = isFarEnoughFromPreviousTick(top, previousTopRaTick, minTickPixelSpacing);
-    const drawBottomTick = isFarEnoughFromPreviousTick(bottom, previousBottomRaTick, minTickPixelSpacing);
+    const topRange = insetRaRangeAtDec(bounds, bounds.decMax);
+    const bottomRange = insetRaRangeAtDec(bounds, bounds.decMin);
+    const top = ra >= topRange.raMin && ra <= topRange.raMax ? projection.project(ra, bounds.decMax) : null;
+    const bottom = ra >= bottomRange.raMin && ra <= bottomRange.raMax ? projection.project(ra, bounds.decMin) : null;
+    const drawTopTick = top && isFarEnoughFromPreviousTick(top, previousTopRaTick, minTickPixelSpacing);
+    const drawBottomTick = bottom && isFarEnoughFromPreviousTick(bottom, previousBottomRaTick, minTickPixelSpacing);
     if (!drawTopTick && !drawBottomTick) continue;
     const isMajorTick = bounds.grid?.raStepHours ? isOnStep(ra, bounds.grid.raStepHours) : Math.round(ra * 60) % 10 === 0;
     const tickLength = isMajorTick ? 12 : 7;
@@ -596,8 +745,9 @@ function renderInsetGrid(idPrefix, inset, bounds, projection) {
     let previousRightDecTick = null;
     for (let dec = firstSmallDecTick; dec <= lastSmallDecTick + 1e-9; dec += smallDecTickStepDegrees) {
       if (hasInteriorGridLine(dec, bounds.decMin, bounds.decMax, decTickStep)) continue;
-      const left = projection.project(bounds.raMax, dec);
-      const right = projection.project(bounds.raMin, dec);
+      const raRange = insetRaRangeAtDec(bounds, dec);
+      const left = projection.project(raRange.raMax, dec);
+      const right = projection.project(raRange.raMin, dec);
       if (!left || !right) continue;
       const drawLeftTick = isFarEnoughFromPreviousTick(left, previousLeftDecTick, minTickPixelSpacing);
       const drawRightTick = isFarEnoughFromPreviousTick(right, previousRightDecTick, minTickPixelSpacing);
@@ -634,11 +784,12 @@ function renderInsetCoordinateLabels(idPrefix, inset, bounds, projection) {
   const lastRaTick = floorToStep(bounds.raMax, raTickStepHours);
   for (let ra = firstRaTick; ra <= lastRaTick + 1e-9; ra += raTickStepHours) {
     if (!isInteriorCoordinate(ra, bounds.raMin, bounds.raMax)) continue;
-    const top = projection.project(ra, bounds.decMax);
-    const bottom = projection.project(ra, bounds.decMin);
-    if (!top || !bottom) continue;
-    lines.push(`      <text x="${number(top.x)}" y="${number(top.y - 10)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
-    lines.push(`      <text x="${number(bottom.x)}" y="${number(bottom.y + 25)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
+    const topRange = insetRaRangeAtDec(bounds, bounds.decMax);
+    const bottomRange = insetRaRangeAtDec(bounds, bounds.decMin);
+    const top = ra >= topRange.raMin && ra <= topRange.raMax ? projection.project(ra, bounds.decMax) : null;
+    const bottom = ra >= bottomRange.raMin && ra <= bottomRange.raMax ? projection.project(ra, bounds.decMin) : null;
+    if (top) lines.push(`      <text x="${number(top.x)}" y="${number(top.y - 10)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
+    if (bottom) lines.push(`      <text x="${number(bottom.x)}" y="${number(bottom.y + 25)}" text-anchor="middle">${formatRaLabel(ra)}</text>`);
   }
 
   const decLabelStep = bounds.labels?.decStepDegrees ?? 2;
@@ -646,8 +797,9 @@ function renderInsetCoordinateLabels(idPrefix, inset, bounds, projection) {
   const lastDecLabel = floorToStep(bounds.decMax, decLabelStep);
   for (let dec = firstDecLabel; dec <= lastDecLabel + 1e-9; dec += decLabelStep) {
     if (!isInteriorCoordinate(dec, bounds.decMin, bounds.decMax)) continue;
-    const left = projection.project(bounds.raMax, dec);
-    const right = projection.project(bounds.raMin, dec);
+    const raRange = insetRaRangeAtDec(bounds, dec);
+    const left = projection.project(raRange.raMax, dec);
+    const right = projection.project(raRange.raMin, dec);
     if (!left || !right) continue;
     lines.push(`      <text x="${number(left.x - 10)}" y="${number(left.y + 5)}" text-anchor="end">${formatDecLabel(dec)}</text>`);
     lines.push(`      <text x="${number(right.x + 10)}" y="${number(right.y + 5)}" text-anchor="start">${formatDecLabel(dec)}</text>`);
@@ -693,23 +845,24 @@ function renderInsetStarLabels(idPrefix, stars, magnitudeRange, projection) {
   return lines.join('\n');
 }
 
-function renderGaiaInset({ idPrefix, layerName, title, inset, bounds, stars = [], projectionType = 'linear' }) {
+function renderGaiaInset({ idPrefix, layerName, title, inset, bounds, stars = [], projectionType = 'linear', sourceLabel = 'Gaia DR3' }) {
   const plotX = inset.paddingLeft;
   const magnitudeRange = createInsetMagnitudeRange(stars, bounds);
   const projection = createInsetProjection(inset, bounds, projectionType);
   const projectionLabel = projection.type === 'stereographic' ? 'stereographic conformal' : 'linear RA/Dec';
   const boundaryPath = pathAttribute(createInsetBoundaryPoints(bounds, projection));
+  const boundsSummary = formatInsetBoundsSummary(bounds);
 
   return [
     `  <g id="${idPrefix}-layer" data-layer="${escapeXml(layerName)}" transform="translate(${inset.x} ${inset.y})">`,
     `    <title>${escapeXml(title)} Inset</title>`,
-    `    <desc>${escapeXml(title)} chart using Gaia DR3 sources with ${projectionLabel} projection, bounded by RA ${formatRaLabel(bounds.raMin)} to ${formatRaLabel(bounds.raMax)} and Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}, Gaia G &lt;= ${bounds.magLimit}.</desc>`,
+    `    <desc>${escapeXml(title)} chart using ${escapeXml(sourceLabel)} sources with ${projectionLabel} projection, bounded by ${escapeXml(boundsSummary)}, magnitude &lt;= ${bounds.magLimit}.</desc>`,
     '    <defs>',
     `      <clipPath id="${idPrefix}-clip"><path d="${boundaryPath}" /></clipPath>`,
     '    </defs>',
     `    <rect id="${idPrefix}-background" width="${inset.width}" height="${inset.height}" fill="${PRINT_CHART.background}" />`,
     `    <text id="${idPrefix}-title" x="${plotX}" y="28" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="22">${escapeXml(title)}</text>`,
-    `    <text id="${idPrefix}-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="12">Gaia G &lt;= ${bounds.magLimit} / RA ${formatRaLabel(bounds.raMin)} to ${formatRaLabel(bounds.raMax)} / Dec ${formatDecLabel(bounds.decMin)} to ${formatDecLabel(bounds.decMax)}</text>`,
+    `    <text id="${idPrefix}-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="12">${escapeXml(sourceLabel)} / magnitude &lt;= ${bounds.magLimit} / ${escapeXml(boundsSummary)}</text>`,
     renderInsetGrid(idPrefix, inset, bounds, projection),
     renderInsetCoordinateLabels(idPrefix, inset, bounds, projection),
     renderInsetStars(idPrefix, stars, magnitudeRange, projection),
@@ -812,7 +965,7 @@ export function renderInsetStarChartSvg(chartId, stars = [], options = {}) {
       heightIn: inset.height / PRINT_CHART.unitsPerIn,
       title: `${chart.title} Inset`,
       ariaLabel: `${chart.title} inset star chart`,
-      desc: `${chart.title} chart using Gaia DR3 sources, bounded by RA ${formatRaLabel(chart.bounds.raMin)} to ${formatRaLabel(chart.bounds.raMax)} and Dec ${formatDecLabel(chart.bounds.decMin)} to ${formatDecLabel(chart.bounds.decMax)}, Gaia G <= ${chart.bounds.magLimit}.`,
+      desc: `${chart.title} chart using ${chart.sourceLabel ?? 'Gaia DR3'} sources, bounded by ${formatInsetBoundsSummary(chart.bounds)}, magnitude <= ${chart.bounds.magLimit}.`,
       xmlDeclaration: options.xmlDeclaration,
       parts: [
         renderGaiaInset({
@@ -823,6 +976,7 @@ export function renderInsetStarChartSvg(chartId, stars = [], options = {}) {
           bounds: chart.bounds,
           stars,
           projectionType: chart.projection,
+          sourceLabel: chart.sourceLabel,
         }),
       ],
     }),
@@ -844,7 +998,7 @@ export function renderCompositeStarChartSvg(dataset, options = {}) {
       heightIn: PRINT_CHART.heightIn,
       title: 'HYG Star Chart',
       ariaLabel: 'HYG v4.2 all-sky star chart',
-      desc: `HYG v4.2 star chart, magnitude <= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper area contains separate Gaia DR3 inset layers for Scorpio and the Pleiades Cluster M45.`,
+      desc: `HYG v4.2 star chart, magnitude <= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper area contains separate Gaia DR3 inset layers for Scorpio, Lyra, and the Pleiades Cluster M45.`,
       xmlDeclaration: options.xmlDeclaration,
       parts: [
         '  <g id="background">',
@@ -861,6 +1015,7 @@ export function renderCompositeStarChartSvg(dataset, options = {}) {
           bounds: INSET_STAR_CHARTS.scorpio.bounds,
           stars: options.scorpioStars,
           projectionType: INSET_STAR_CHARTS.scorpio.projection,
+          sourceLabel: INSET_STAR_CHARTS.scorpio.sourceLabel,
         }),
         renderGaiaInset({
           idPrefix: 'pleiades-m45',
@@ -870,6 +1025,17 @@ export function renderCompositeStarChartSvg(dataset, options = {}) {
           bounds: INSET_STAR_CHARTS.pleiades.bounds,
           stars: options.pleiadesStars,
           projectionType: INSET_STAR_CHARTS.pleiades.projection,
+          sourceLabel: INSET_STAR_CHARTS.pleiades.sourceLabel,
+        }),
+        renderGaiaInset({
+          idPrefix: 'lyra',
+          layerName: INSET_STAR_CHARTS.lyra.layerName,
+          title: INSET_STAR_CHARTS.lyra.title,
+          inset: INSET_STAR_CHARTS.lyra.inset,
+          bounds: INSET_STAR_CHARTS.lyra.bounds,
+          stars: options.lyraStars,
+          projectionType: INSET_STAR_CHARTS.lyra.projection,
+          sourceLabel: INSET_STAR_CHARTS.lyra.sourceLabel,
         }),
         mainChartSvg,
       ],

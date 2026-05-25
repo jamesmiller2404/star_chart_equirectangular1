@@ -6,6 +6,7 @@ import {
   MAIN_STAR_CHART_ID,
   STAR_CHART_IDS,
   getInsetStarChart,
+  isCoordinateInsideInsetBounds,
   normalizeStarChartId,
   renderInsetStarChartSvg,
   renderMainStarChartSvg,
@@ -15,10 +16,18 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const gaiaInputPaths = {
   pleiades: path.join(root, 'data', 'gaia', 'pleiades-m45-gaia-dr3.json'),
   scorpio: path.join(root, 'data', 'gaia', 'scorpio-gaia-dr3.json'),
+  lyra: path.join(root, 'data', 'gaia', 'lyra-gaia-dr3.json'),
 };
+const hygInputCandidates = [
+  path.join(root, 'public', 'data', 'stars-mag-7_5.json'),
+  path.join(root, 'poc', 'stars-mag-7_5.json'),
+  path.join(root, 'public', 'data', 'stars-mag-6_5.json'),
+  path.join(root, 'poc', 'stars-mag-6_5.json'),
+];
 const fetchScripts = {
   pleiades: 'fetch:pleiades',
   scorpio: 'fetch:scorpio',
+  lyra: 'fetch:lyra',
 };
 const inputCandidates = [
   path.join(root, 'public', 'data', 'stars-mag-6_5.json'),
@@ -28,16 +37,18 @@ const defaultOutputPaths = {
   main: path.join(root, 'exports', 'hyg-star-chart-main-24x12.svg'),
   pleiades: path.join(root, 'exports', INSET_STAR_CHARTS.pleiades.outputFileName),
   scorpio: path.join(root, 'exports', INSET_STAR_CHARTS.scorpio.outputFileName),
+  lyra: path.join(root, 'exports', INSET_STAR_CHARTS.lyra.outputFileName),
 };
 
 function usage() {
   return [
-    'Usage: npm run export:svg -- [--chart main|pleiades|scorpio|all] [--output path]',
+    'Usage: npm run export:svg -- [--chart main|pleiades|scorpio|lyra|all] [--output path]',
     '',
     'Examples:',
     '  npm run export:svg -- --chart main',
     '  npm run export:svg -- --chart pleiades',
     '  npm run export:svg -- --chart scorpio --output exports/scorpio.svg',
+    '  npm run export:svg -- --chart lyra',
     '  npm run export:svg -- --chart all',
   ].join('\n');
 }
@@ -93,7 +104,7 @@ function selectedChartIds(chartOption) {
 
   const chartId = normalizeStarChartId(normalizedOption);
   if (!chartId) {
-    throw new Error(`Unknown chart "${chartOption}". Use main, pleiades, scorpio, or all.`);
+    throw new Error(`Unknown chart "${chartOption}". Use main, pleiades, scorpio, lyra, or all.`);
   }
 
   return [chartId];
@@ -112,6 +123,48 @@ async function readDataset() {
   throw new Error('No generated star dataset found. Run npm run build:data first.');
 }
 
+function isInBounds(star, chart) {
+  return isCoordinateInsideInsetBounds(chart.bounds, star.ra, star.dec, star.mag);
+}
+
+function angularDistanceArcsec(a, b) {
+  const degreesToRadians = Math.PI / 180;
+  const raA = a.ra * 15 * degreesToRadians;
+  const raB = b.ra * 15 * degreesToRadians;
+  const decA = a.dec * degreesToRadians;
+  const decB = b.dec * degreesToRadians;
+  const deltaRa = raA - raB;
+  const deltaDec = decA - decB;
+  const sinDeltaDec = Math.sin(deltaDec / 2);
+  const sinDeltaRa = Math.sin(deltaRa / 2);
+  const haversine = sinDeltaDec ** 2 + Math.cos(decA) * Math.cos(decB) * sinDeltaRa ** 2;
+  return 2 * Math.asin(Math.min(1, Math.sqrt(haversine))) / degreesToRadians * 3600;
+}
+
+function isNearAnyHygStar(star, hygStars) {
+  const matchRadiusArcsec = 20;
+  return hygStars.some((hygStar) => angularDistanceArcsec(star, hygStar) <= matchRadiusArcsec);
+}
+
+async function readHygInsetStars(chart) {
+  for (const filePath of hygInputCandidates) {
+    try {
+      const catalog = JSON.parse(await fsPromises.readFile(filePath, 'utf8'));
+      return catalog.stars
+        .filter((star) => isInBounds(star, chart))
+        .map((star) => ({
+          ...star,
+          catalog: 'HYG v4.2',
+          sourceId: star.id,
+        }));
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+
+  throw new Error('No generated HYG star dataset found. Run npm run build:data first.');
+}
+
 async function readGaiaInsetStars(chartId) {
   const chart = getInsetStarChart(chartId);
   if (!chart) throw new Error(`Unknown inset chart "${chartId}".`);
@@ -126,15 +179,17 @@ async function readGaiaInsetStars(chartId) {
     throw error;
   }
 
-  return catalog.stars
-    .filter((star) => (
-      star.mag <= chart.bounds.magLimit &&
-      star.ra >= chart.bounds.raMin &&
-      star.ra <= chart.bounds.raMax &&
-      star.dec >= chart.bounds.decMin &&
-      star.dec <= chart.bounds.decMax
-    ))
-    .sort((a, b) => a.mag - b.mag);
+  const gaiaStars = catalog.stars.filter((star) => isInBounds(star, chart));
+
+  if (chart.catalogPriority !== 'hyg-gaia') {
+    return gaiaStars.sort((a, b) => a.mag - b.mag);
+  }
+
+  const hygStars = await readHygInsetStars(chart);
+  return [
+    ...hygStars,
+    ...gaiaStars.filter((star) => !isNearAnyHygStar(star, hygStars)),
+  ].sort((a, b) => a.mag - b.mag);
 }
 
 async function writeSvg(outputPath, svg) {
@@ -175,5 +230,5 @@ for (const chartId of chartIds) {
   const stars = await readGaiaInsetStars(chartId);
   const { svg } = renderInsetStarChartSvg(chartId, stars, { xmlDeclaration: true });
   await writeSvg(outputPath, svg);
-  console.log(`${chart.title} inset contains ${stars.length} Gaia DR3 sources to G magnitude ${chart.bounds.magLimit}.`);
+  console.log(`${chart.title} inset contains ${stars.length} ${chart.sourceLabel ?? 'Gaia DR3'} sources to magnitude ${chart.bounds.magLimit}.`);
 }

@@ -39,6 +39,9 @@ export default async function PrintPage({ searchParams }: PrintPageProps) {
           <Link href="/print?chart=scorpio" aria-current={chartId === 'scorpio' ? 'page' : undefined}>
             Scorpio
           </Link>
+          <Link href="/print?chart=lyra" aria-current={chartId === 'lyra' ? 'page' : undefined}>
+            Lyra
+          </Link>
         </nav>
       </header>
 
