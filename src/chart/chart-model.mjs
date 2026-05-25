@@ -73,6 +73,55 @@ export function pointForCoordinates(ra, dec, width = DEFAULT_CHART.width, height
   };
 }
 
+export const ECLIPTIC_OBLIQUITY_DEGREES = 23.4392911;
+
+function radiansForDegrees(degrees) {
+  return (degrees * Math.PI) / 180;
+}
+
+function degreesForRadians(radians) {
+  return (radians * 180) / Math.PI;
+}
+
+export function equatorialCoordinateForEclipticLongitude(longitudeDegrees) {
+  const longitudeRadians = radiansForDegrees(longitudeDegrees);
+  const obliquityRadians = radiansForDegrees(ECLIPTIC_OBLIQUITY_DEGREES);
+  const raRadians = Math.atan2(
+    Math.sin(longitudeRadians) * Math.cos(obliquityRadians),
+    Math.cos(longitudeRadians),
+  );
+  const decRadians = Math.asin(Math.sin(longitudeRadians) * Math.sin(obliquityRadians));
+  const raDegrees = (degreesForRadians(raRadians) + 360) % 360;
+
+  return {
+    ra: raDegrees / 15,
+    dec: degreesForRadians(decRadians),
+  };
+}
+
+export function createEclipticCoordinates(stepDegrees = 2) {
+  const coordinates = [];
+
+  for (let longitude = 0; longitude <= 360; longitude += stepDegrees) {
+    const coordinate = equatorialCoordinateForEclipticLongitude(longitude);
+    coordinates.push({
+      ...coordinate,
+      ra: longitude === 360 ? 24 : coordinate.ra,
+      longitude,
+    });
+  }
+
+  if (coordinates.at(-1)?.longitude !== 360) {
+    coordinates.push({
+      ...equatorialCoordinateForEclipticLongitude(360),
+      ra: 24,
+      longitude: 360,
+    });
+  }
+
+  return coordinates;
+}
+
 export function createHipStarMap(stars) {
   const map = new Map();
 
@@ -181,8 +230,69 @@ export function labelForStar(star) {
   return star.proper || star.bf || `HYG ${star.id}`;
 }
 
+const BAYER_GREEK_LETTERS = {
+  Alp: 'α',
+  Bet: 'β',
+  Gam: 'γ',
+  Del: 'δ',
+  Eps: 'ε',
+  Zet: 'ζ',
+  Eta: 'η',
+  The: 'θ',
+  Iot: 'ι',
+  Kap: 'κ',
+  Lam: 'λ',
+  Mu: 'μ',
+  Nu: 'ν',
+  Xi: 'ξ',
+  Omi: 'ο',
+  Pi: 'π',
+  Rho: 'ρ',
+  Sig: 'σ',
+  Tau: 'τ',
+  Ups: 'υ',
+  Phi: 'φ',
+  Chi: 'χ',
+  Psi: 'ψ',
+  Ome: 'ω',
+};
+
+const SUPERSCRIPT_DIGITS = {
+  0: '⁰',
+  1: '¹',
+  2: '²',
+  3: '³',
+  4: '⁴',
+  5: '⁵',
+  6: '⁶',
+  7: '⁷',
+  8: '⁸',
+  9: '⁹',
+};
+
+function superscriptNumber(value) {
+  return String(value)
+    .split('')
+    .map((digit) => SUPERSCRIPT_DIGITS[digit] ?? digit)
+    .join('');
+}
+
+export function bayerGreekLetterForStar(star) {
+  const match = String(star.bf ?? '').trim().match(/^(?:\d+)?([A-Z][a-z]{2})(\d*)/);
+  if (!match) return '';
+
+  const letter = BAYER_GREEK_LETTERS[match[1]];
+  if (!letter) return '';
+
+  return `${letter}${match[2] ? superscriptNumber(match[2]) : ''}`;
+}
+
 export function shouldLabelStar(star) {
-  return Boolean(star.proper) || star.mag <= 2.15;
+  return Boolean(star.proper) || star.mag <= 2.15 || (star.mag <= 4.2 && Boolean(bayerGreekLetterForStar(star)));
+}
+
+export function shouldLabelBayerStar(star) {
+  return Boolean(bayerGreekLetterForStar(star)) && (Boolean(star.proper) || star.mag <= 4.2);
 }
 
 export function escapeXml(value) {

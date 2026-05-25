@@ -6,6 +6,7 @@ import {
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   constellationLineSegments,
+  createEclipticCoordinates,
   createHipStarMap,
   createDecTickMarks,
   createDecTicks,
@@ -17,6 +18,7 @@ import {
   GRID_OPACITY,
   labelForStar,
   MAGNITUDE_SCALE_TICKS,
+  pointForCoordinates,
   pointForStar,
   starRadius,
   starRadiusForMagnitude,
@@ -80,12 +82,13 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       context.fillRect(0, 0, width, height);
 
       drawGrid(context, width, height, padding);
+      drawCoordinateReferenceLines(context, width, height, padding, dpr);
       drawConstellationLines(context, dataset, width, height, padding, dpr);
 
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
         const point = pointForStar(star, width, height, padding);
-        const radius = starRadius(star, dpr, radiusCompression);
+        const radius = starRadius(star, star.mag <= 4.2 ? dpr * 1.5 : dpr, radiusCompression);
         const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
         context.beginPath();
@@ -325,6 +328,47 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.textAlign = 'left';
     context.fillText(`${dec > 0 ? '+' : ''}${dec}`, width - padding + 8, y);
   }
+}
+
+function drawCoordinateReferenceLines(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  padding: number,
+  dpr: number,
+) {
+  const eclipticCoordinates = createEclipticCoordinates();
+  const vernalEquinox = pointForCoordinates(0, 0, width, height, padding);
+  const cssPixelsPerPoint = 96 / 72;
+
+  context.save();
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+
+  context.strokeStyle = `rgba(184, 184, 184, ${CONSTELLATION_LINE_OPACITY})`;
+  context.lineWidth = CONSTELLATION_LINE_WIDTH_PT * cssPixelsPerPoint * dpr;
+  context.setLineDash([14 * dpr, 9 * dpr]);
+  context.beginPath();
+  eclipticCoordinates.forEach((coordinate, index) => {
+    const point = pointForCoordinates(coordinate.ra, coordinate.dec, width, height, padding);
+    if (index === 0) {
+      context.moveTo(point.x, point.y);
+    } else {
+      context.lineTo(point.x, point.y);
+    }
+  });
+  context.stroke();
+
+  context.setLineDash([]);
+  context.fillStyle = 'rgba(174, 184, 199, 0.9)';
+  context.strokeStyle = '#05070b';
+  context.lineWidth = Math.max(1, 1.2 * dpr);
+  context.beginPath();
+  context.arc(vernalEquinox.x, vernalEquinox.y, 4.2 * dpr, 0, Math.PI * 2);
+  context.fill();
+  context.stroke();
+
+  context.restore();
 }
 
 function drawMagnitudeScale(

@@ -1,8 +1,10 @@
+import fs from 'node:fs';
 import {
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   constellationLineSegments,
+  createEclipticCoordinates,
   createHipStarMap,
   createDecTickMarks,
   createDecTicks,
@@ -11,14 +13,17 @@ import {
   DEFAULT_CHART,
   DEFAULT_MAG_LIMIT,
   DIM_STAR_OPACITY,
+  bayerGreekLetterForStar,
   escapeXml,
   GRID_LABEL_OPACITY,
   GRID_OPACITY,
   labelForStar,
   MAGNITUDE_SCALE_TICKS,
   MIN_STAR_RADIUS,
+  pointForCoordinates,
   pointForStar,
   PRINT_CHART,
+  shouldLabelBayerStar,
   shouldLabelStar,
   starRadius,
   starRadiusForMagnitude,
@@ -29,6 +34,10 @@ const TARGET_MIN_STAR_DIAMETER_PX = 0.75;
 const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_PX_PER_IN;
 const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
+const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
+const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
+const MILKY_WAY_LAYER_OPACITY = 0.5;
+const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
 export const PLEIADES_M45_BOUNDS = {
   raMin: 3 + 42 / 60,
   raMax: 3 + 54 / 60,
@@ -215,6 +224,234 @@ function number(value) {
   return Math.round(value * 100) / 100;
 }
 
+function raHoursForCelestialLongitude(longitudeDegrees) {
+  const normalizedLongitude = longitudeDegrees < 0 ? longitudeDegrees + 360 : longitudeDegrees;
+  return normalizedLongitude / 15;
+}
+
+function pointForCelestialCoordinate(coordinate, width, height, padding) {
+  const [longitude, latitude] = coordinate;
+  return pointForCoordinates(raHoursForCelestialLongitude(longitude), latitude, width, height, padding);
+}
+
+function unwrapHorizontalPoints(points, plotWidth) {
+  if (points.length < 2) return points;
+
+  const unwrappedPoints = [{ ...points[0] }];
+  for (let index = 1; index < points.length; index += 1) {
+    let x = points[index].x;
+    const previousX = unwrappedPoints[index - 1].x;
+    while (x - previousX > plotWidth / 2) x -= plotWidth;
+    while (previousX - x > plotWidth / 2) x += plotWidth;
+    unwrappedPoints.push({
+      ...points[index],
+      x,
+    });
+  }
+
+  return unwrappedPoints;
+}
+
+function isSamePoint(a, b) {
+  return Math.abs(a.x - b.x) < 1e-7 && Math.abs(a.y - b.y) < 1e-7;
+}
+
+function rotatePoints(points, startIndex) {
+  return [
+    ...points.slice(startIndex),
+    ...points.slice(0, startIndex),
+  ];
+}
+
+function largestHorizontalJumpIndex(points) {
+  let largestJump = 0;
+  let largestJumpIndex = 0;
+
+  for (let index = 1; index < points.length; index += 1) {
+    const jump = Math.abs(points[index].x - points[index - 1].x);
+    if (jump > largestJump) {
+      largestJump = jump;
+      largestJumpIndex = index;
+    }
+  }
+
+  return largestJumpIndex;
+}
+
+function unwrapClosedHorizontalRing(points, plotWidth) {
+  if (points.length < 3) return unwrapHorizontalPoints(points, plotWidth);
+
+  const openRing = isSamePoint(points[0], points.at(-1)) ? points.slice(0, -1) : points;
+  const startIndex = largestHorizontalJumpIndex([
+    ...openRing,
+    openRing[0],
+  ]);
+  const rotatedRing = rotatePoints(openRing, startIndex % openRing.length);
+  return unwrapHorizontalPoints(rotatedRing, plotWidth);
+}
+
+function translatedPoints(points, shiftX) {
+  if (!shiftX) return points;
+  return points.map((point) => ({
+    ...point,
+    x: point.x + shiftX,
+  }));
+}
+
+function pathIntersectsPlotArea(points, padding, plotWidth, plotHeight) {
+  const maxPlotX = padding + plotWidth;
+  const maxPlotY = padding + plotHeight;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+    minY = Math.min(minY, point.y);
+    maxY = Math.max(maxY, point.y);
+  }
+
+  return maxX >= padding && minX <= maxPlotX && maxY >= padding && minY <= maxPlotY;
+}
+
+function projectedMilkyWayRing(ring, width, height, padding) {
+  const plotWidth = width - padding * 2;
+  return unwrapClosedHorizontalRing(
+    ring.map((coordinate) => pointForCelestialCoordinate(coordinate, width, height, padding)),
+    plotWidth,
+  );
+}
+
+function translatedRings(rings, shiftX) {
+  if (!shiftX) return rings;
+  return rings.map((ring) => translatedPoints(ring, shiftX));
+}
+
+function horizontalCenter(points) {
+  if (!points.length) return 0;
+  let minX = Infinity;
+  let maxX = -Infinity;
+
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    maxX = Math.max(maxX, point.x);
+  }
+
+  return (minX + maxX) / 2;
+}
+
+function alignRingsToOuterRing(rings, plotWidth) {
+  if (rings.length < 2) return rings;
+
+  const outerCenter = horizontalCenter(rings[0]);
+  return rings.map((ring, index) => {
+    if (index === 0) return ring;
+
+    let shiftX = 0;
+    let ringCenter = horizontalCenter(ring);
+    while (ringCenter + shiftX - outerCenter > plotWidth / 2) shiftX -= plotWidth;
+    while (outerCenter - (ringCenter + shiftX) > plotWidth / 2) shiftX += plotWidth;
+    return translatedPoints(ring, shiftX);
+  });
+}
+
+function polygonIntersectsPlotArea(rings, padding, plotWidth, plotHeight) {
+  return rings.some((ring) => pathIntersectsPlotArea(ring, padding, plotWidth, plotHeight));
+}
+
+function pathAttributeWithEdgeClosure(points, minX, maxX, minY, maxY) {
+  if (!points.length) return '';
+
+  const [firstPoint, ...remainingPoints] = points;
+  const lastPoint = points.at(-1);
+  let closingPoints = [];
+
+  if (Math.abs(firstPoint.x - lastPoint.x) > (maxX - minX) / 2) {
+    const lastEdgeX = lastPoint.x > firstPoint.x ? maxX : minX;
+    const firstEdgeX = lastPoint.x > firstPoint.x ? minX : maxX;
+    const outsideY = (firstPoint.y + lastPoint.y) / 2 < (minY + maxY) / 2 ? minY - 1 : maxY + 1;
+    closingPoints = [
+      { x: lastEdgeX, y: lastPoint.y },
+      { x: lastEdgeX, y: outsideY },
+      { x: firstEdgeX, y: outsideY },
+      { x: firstEdgeX, y: firstPoint.y },
+    ];
+  }
+
+  return [
+    `M ${number(firstPoint.x)} ${number(firstPoint.y)}`,
+    ...remainingPoints.map((point) => `L ${number(point.x)} ${number(point.y)}`),
+    ...closingPoints.map((point) => `L ${number(point.x)} ${number(point.y)}`),
+    'Z',
+  ].join(' ');
+}
+
+function pathForRings(rings, minX, maxX, minY, maxY) {
+  return rings.map((ring) => pathAttributeWithEdgeClosure(ring, minX, maxX, minY, maxY)).join(' ');
+}
+
+function createMilkyWayFeaturePaths(feature, width, height, padding) {
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const minX = padding;
+  const maxX = padding + plotWidth;
+  const minY = padding;
+  const maxY = padding + plotHeight;
+  const paths = [];
+
+  if (feature.geometry?.type !== 'MultiPolygon') return paths;
+
+  for (const polygon of feature.geometry.coordinates) {
+    const rings = alignRingsToOuterRing(
+      polygon.map((ring) => projectedMilkyWayRing(ring, width, height, padding)),
+      plotWidth,
+    );
+    for (const shiftX of [-plotWidth, 0, plotWidth]) {
+      const shiftedRings = translatedRings(rings, shiftX);
+      if (polygonIntersectsPlotArea(shiftedRings, padding, plotWidth, plotHeight)) {
+        paths.push(pathForRings(shiftedRings, minX, maxX, minY, maxY));
+      }
+    }
+  }
+
+  return paths;
+}
+
+function renderPlotClipPath(width, height, padding) {
+  return [
+    '  <defs>',
+    `    <clipPath id="${MAIN_CHART_PLOT_CLIP_ID}">`,
+    `      <rect x="${padding}" y="${padding}" width="${width - padding * 2}" height="${height - padding * 2}" />`,
+    '    </clipPath>',
+    '  </defs>',
+  ].join('\n');
+}
+
+function renderMilkyWayLayer(width, height, padding) {
+  const lines = [
+    `  <g id="milky-way-layer" data-layer="Milky Way outline" opacity="${MILKY_WAY_LAYER_OPACITY}" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
+    '    <desc>Faint filled Milky Way outlines from d3-celestial data/mw.json; paths are fills only for Illustrator layer editing.</desc>',
+  ];
+
+  for (const [featureIndex, feature] of D3_CELESTIAL_MILKY_WAY.features.entries()) {
+    const layerId = escapeXml(feature.id ?? `ol${featureIndex + 1}`);
+    const opacity = MILKY_WAY_FEATURE_OPACITIES[featureIndex] ?? 0.02;
+    const fill = featureIndex >= D3_CELESTIAL_MILKY_WAY.features.length - 2 ? PRINT_CHART.text : PRINT_CHART.mutedText;
+    const paths = createMilkyWayFeaturePaths(feature, width, height, padding);
+
+    lines.push(`    <g id="milky-way-${layerId}" data-brightness-step="${layerId}" fill="${fill}" fill-opacity="${opacity}" fill-rule="evenodd">`);
+    for (const path of paths) {
+      lines.push(`      <path d="${path}" />`);
+    }
+    lines.push('    </g>');
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
 function renderGrid(width, height, padding) {
   const lines = [
     `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
@@ -272,6 +509,20 @@ function renderGridLabels(width, height, padding) {
   return lines.join('\n');
 }
 
+function renderCoordinateReferenceLines(width, height, padding) {
+  const eclipticPoints = createEclipticCoordinates().map((coordinate) => (
+    pointForCoordinates(coordinate.ra, coordinate.dec, width, height, padding)
+  ));
+  const vernalEquinox = pointForCoordinates(0, 0, width, height, padding);
+
+  return [
+    `  <g id="coordinate-reference-lines" fill="none" stroke-linecap="round" stroke-linejoin="round">`,
+    `    <polyline id="ecliptic" points="${pointsAttribute(eclipticPoints)}" stroke="${PRINT_CHART.constellationLine}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" stroke-dasharray="14 9" />`,
+    `    <circle id="vernal-equinox-marker" cx="${number(vernalEquinox.x)}" cy="${number(vernalEquinox.y)}" r="4.2" fill="${PRINT_CHART.mutedText}" fill-opacity="0.9" stroke="${PRINT_CHART.background}" stroke-width="1.2" />`,
+    '  </g>',
+  ].join('\n');
+}
+
 function renderStars(id, stars, scale, opacity = 1) {
   const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
   const lines = [`  <g id="${id}"${opacityAttribute}>`];
@@ -315,15 +566,32 @@ function renderConstellationLines(dataset) {
   return lines.join('\n');
 }
 
-function renderLabels(stars) {
+function renderStarNameLabels(stars) {
   const lines = [
-    `  <g id="labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
   ];
 
   for (const star of stars) {
     const point = pointForStar(star);
     lines.push(
-      `    <text id="label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y - 7)}">${escapeXml(labelForStar(star))}</text>`,
+      `    <text id="star-name-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y - 7)}">${escapeXml(labelForStar(star))}</text>`,
+    );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderBayerDesignationLabels(stars) {
+  const lines = [
+    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
+  ];
+
+  for (const star of stars) {
+    const point = pointForStar(star);
+    const yOffset = star.proper ? 9 : -7;
+    lines.push(
+      `    <text id="bayer-designation-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y + yOffset)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`,
     );
   }
 
@@ -900,18 +1168,24 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
   const brightStars = dataset.stars.filter((star) => star.mag <= 4.2);
   const dimStars = dataset.stars.filter((star) => star.mag > 4.2);
   const labels = dataset.stars.filter(shouldLabelStar);
+  const nameLabels = labels.filter((star) => star.proper);
+  const bayerLabels = dataset.stars.filter(shouldLabelBayerStar);
   const transform = chartX || chartY ? ` transform="translate(${chartX} ${chartY})"` : '';
   const parts = [
     `  <g id="equirectangular-star-chart" transform="translate(${chartX} ${chartY})">`,
     '  <g id="chart-background">',
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
+    renderPlotClipPath(width, height, padding),
+    renderMilkyWayLayer(width, height, padding),
     renderGrid(width, height, padding),
     renderGridLabels(width, height, padding),
+    renderCoordinateReferenceLines(width, height, padding),
     renderConstellationLines(dataset),
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
-    renderStars('stars-bright', brightStars, 1.05),
-    renderLabels(labels),
+    renderStars('stars-bright', brightStars, 1.5),
+    renderStarNameLabels(nameLabels),
+    renderBayerDesignationLabels(bayerLabels),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
     `    <rect x="${padding}" y="${padding}" width="${width - padding * 2}" height="${height - padding * 2}" />`,
     '  </g>',
@@ -926,7 +1200,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
 
   return {
     svg: parts.join('\n'),
-    labelCount: labels.length,
+    labelCount: nameLabels.length + bayerLabels.length,
   };
 }
 

@@ -15,3 +15,11 @@ Constellation line data is derived from the Stellarium Western sky culture:
 - Source: https://github.com/Stellarium/stellarium-skycultures/tree/master/western
 - Local source files: `data/constellations/stellarium-western-index.json` and `data/constellations/stellarium-western-description.md`
 - License stated upstream: Text and data: CC BY-SA
+
+## d3-celestial Milky Way Outlines
+
+Milky Way outline data is derived from d3-celestial:
+
+- Source: https://github.com/ofrohn/d3-celestial/blob/master/data/mw.json
+- Local source file: `data/milky-way/d3-celestial-mw.json`
+- License: BSD-3-Clause; see `data/milky-way/LICENSE-d3-celestial`
