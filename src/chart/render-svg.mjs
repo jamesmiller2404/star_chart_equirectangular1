@@ -30,10 +30,10 @@ const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_P
 const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 export const PLEIADES_M45_BOUNDS = {
-  raMin: 3 + 44 / 60,
-  raMax: 3 + 52 / 60,
-  decMin: 23 + 15 / 60,
-  decMax: 25,
+  raMin: 3 + 42 / 60,
+  raMax: 3 + 54 / 60,
+  decMin: 23,
+  decMax: 25 + 30 / 60,
   magLimit: 12,
   grid: {
     raStepHours: 2 / 60,
