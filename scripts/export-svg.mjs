@@ -1,19 +1,103 @@
 import fsPromises from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PLEIADES_M45_BOUNDS, SCORPIO_BOUNDS, renderStarChartSvg } from '../src/chart/render-svg.mjs';
+import {
+  INSET_STAR_CHARTS,
+  MAIN_STAR_CHART_ID,
+  STAR_CHART_IDS,
+  getInsetStarChart,
+  normalizeStarChartId,
+  renderInsetStarChartSvg,
+  renderMainStarChartSvg,
+} from '../src/chart/render-svg.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const pleiadesInputPath = path.join(root, 'data', 'gaia', 'pleiades-m45-gaia-dr3.json');
-const scorpioInputPath = path.join(root, 'data', 'gaia', 'scorpio-gaia-dr3.json');
+const gaiaInputPaths = {
+  pleiades: path.join(root, 'data', 'gaia', 'pleiades-m45-gaia-dr3.json'),
+  scorpio: path.join(root, 'data', 'gaia', 'scorpio-gaia-dr3.json'),
+};
+const fetchScripts = {
+  pleiades: 'fetch:pleiades',
+  scorpio: 'fetch:scorpio',
+};
 const inputCandidates = [
   path.join(root, 'public', 'data', 'stars-mag-6_5.json'),
   path.join(root, 'poc', 'stars-mag-6_5.json'),
 ];
-const outputPaths = [
-  path.join(root, 'exports', 'hyg-star-chart-24x12.svg'),
-  path.join(root, 'exports', 'hyg-star-chart-24x24.svg'),
-];
+const defaultOutputPaths = {
+  main: path.join(root, 'exports', 'hyg-star-chart-main-24x12.svg'),
+  pleiades: path.join(root, 'exports', INSET_STAR_CHARTS.pleiades.outputFileName),
+  scorpio: path.join(root, 'exports', INSET_STAR_CHARTS.scorpio.outputFileName),
+};
+
+function usage() {
+  return [
+    'Usage: npm run export:svg -- [--chart main|pleiades|scorpio|all] [--output path]',
+    '',
+    'Examples:',
+    '  npm run export:svg -- --chart main',
+    '  npm run export:svg -- --chart pleiades',
+    '  npm run export:svg -- --chart scorpio --output exports/scorpio.svg',
+    '  npm run export:svg -- --chart all',
+  ].join('\n');
+}
+
+function parseArgs(argv) {
+  const options = {
+    chart: 'all',
+    outputPath: null,
+  };
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index];
+
+    if (arg === '--help' || arg === '-h') {
+      options.help = true;
+      continue;
+    }
+
+    if (arg === '--chart' || arg === '-c') {
+      options.chart = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--chart=')) {
+      options.chart = arg.slice('--chart='.length);
+      continue;
+    }
+
+    if (arg === '--output' || arg === '-o') {
+      options.outputPath = argv[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (arg.startsWith('--output=')) {
+      options.outputPath = arg.slice('--output='.length);
+      continue;
+    }
+
+    throw new Error(`Unknown argument: ${arg}\n\n${usage()}`);
+  }
+
+  if (!options.chart) throw new Error(`Missing --chart value.\n\n${usage()}`);
+  if (options.outputPath === '') throw new Error(`Missing --output value.\n\n${usage()}`);
+
+  return options;
+}
+
+function selectedChartIds(chartOption) {
+  const normalizedOption = String(chartOption).trim().toLowerCase();
+  if (normalizedOption === 'all') return STAR_CHART_IDS;
+
+  const chartId = normalizeStarChartId(normalizedOption);
+  if (!chartId) {
+    throw new Error(`Unknown chart "${chartOption}". Use main, pleiades, scorpio, or all.`);
+  }
+
+  return [chartId];
+}
 
 async function readDataset() {
   for (const filePath of inputCandidates) {
@@ -28,52 +112,68 @@ async function readDataset() {
   throw new Error('No generated star dataset found. Run npm run build:data first.');
 }
 
-async function readGaiaInsetStars({ filePath, bounds, name, fetchScript }) {
+async function readGaiaInsetStars(chartId) {
+  const chart = getInsetStarChart(chartId);
+  if (!chart) throw new Error(`Unknown inset chart "${chartId}".`);
+
   let catalog;
   try {
-    catalog = JSON.parse(await fsPromises.readFile(filePath, 'utf8'));
+    catalog = JSON.parse(await fsPromises.readFile(gaiaInputPaths[chart.id], 'utf8'));
   } catch (error) {
     if (error.code === 'ENOENT') {
-      throw new Error(`No Gaia DR3 ${name} cache found at ${filePath}. Run npm run ${fetchScript} first.`);
+      throw new Error(`No Gaia DR3 ${chart.title} cache found at ${gaiaInputPaths[chart.id]}. Run npm run ${fetchScripts[chart.id]} first.`);
     }
     throw error;
   }
 
   return catalog.stars
     .filter((star) => (
-      star.mag <= bounds.magLimit &&
-      star.ra >= bounds.raMin &&
-      star.ra <= bounds.raMax &&
-      star.dec >= bounds.decMin &&
-      star.dec <= bounds.decMax
+      star.mag <= chart.bounds.magLimit &&
+      star.ra >= chart.bounds.raMin &&
+      star.ra <= chart.bounds.raMax &&
+      star.dec >= chart.bounds.decMin &&
+      star.dec <= chart.bounds.decMax
     ))
     .sort((a, b) => a.mag - b.mag);
 }
 
-const dataset = await readDataset();
-const pleiadesStars = await readGaiaInsetStars({
-  filePath: pleiadesInputPath,
-  bounds: PLEIADES_M45_BOUNDS,
-  name: 'Pleiades',
-  fetchScript: 'fetch:pleiades',
-});
-const scorpioStars = await readGaiaInsetStars({
-  filePath: scorpioInputPath,
-  bounds: SCORPIO_BOUNDS,
-  name: 'Scorpio',
-  fetchScript: 'fetch:scorpio',
-});
-const { svg, labelCount } = renderStarChartSvg(dataset, { xmlDeclaration: true, pleiadesStars, scorpioStars });
-
-for (const outputPath of outputPaths) {
+async function writeSvg(outputPath, svg) {
   await fsPromises.mkdir(path.dirname(outputPath), { recursive: true });
   await fsPromises.writeFile(outputPath, svg, 'utf8');
   console.log(`Wrote ${outputPath}`);
 }
 
-console.log(`SVG contains ${dataset.count} stars and ${labelCount} editable labels.`);
-console.log(`Pleiades M45 inset contains ${pleiadesStars.length} Gaia DR3 sources to G magnitude ${PLEIADES_M45_BOUNDS.magLimit}.`);
-console.log(`Scorpio inset contains ${scorpioStars.length} Gaia DR3 sources to G magnitude ${SCORPIO_BOUNDS.magLimit}.`);
-if (dataset.constellations) {
-  console.log(`SVG contains ${dataset.constellations.count} constellation line groups.`);
+const options = parseArgs(process.argv.slice(2));
+
+if (options.help) {
+  console.log(usage());
+  process.exit(0);
+}
+
+const chartIds = selectedChartIds(options.chart);
+if (options.outputPath && chartIds.length !== 1) {
+  throw new Error('--output can only be used when exporting a single chart.');
+}
+
+for (const chartId of chartIds) {
+  const outputPath = options.outputPath
+    ? path.resolve(root, options.outputPath)
+    : defaultOutputPaths[chartId];
+
+  if (chartId === MAIN_STAR_CHART_ID) {
+    const dataset = await readDataset();
+    const { svg, labelCount } = renderMainStarChartSvg(dataset, { xmlDeclaration: true });
+    await writeSvg(outputPath, svg);
+    console.log(`Main chart contains ${dataset.count} stars and ${labelCount} editable labels.`);
+    if (dataset.constellations) {
+      console.log(`Main chart contains ${dataset.constellations.count} constellation line groups.`);
+    }
+    continue;
+  }
+
+  const chart = getInsetStarChart(chartId);
+  const stars = await readGaiaInsetStars(chartId);
+  const { svg } = renderInsetStarChartSvg(chartId, stars, { xmlDeclaration: true });
+  await writeSvg(outputPath, svg);
+  console.log(`${chart.title} inset contains ${stars.length} Gaia DR3 sources to G magnitude ${chart.bounds.magLimit}.`);
 }

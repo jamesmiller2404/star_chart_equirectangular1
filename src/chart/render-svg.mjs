@@ -9,16 +9,19 @@ import {
   createRaMinuteTicks,
   createRaTicks,
   DEFAULT_CHART,
+  DEFAULT_MAG_LIMIT,
   DIM_STAR_OPACITY,
   escapeXml,
   GRID_LABEL_OPACITY,
   GRID_OPACITY,
   labelForStar,
+  MAGNITUDE_SCALE_TICKS,
   MIN_STAR_RADIUS,
   pointForStar,
   PRINT_CHART,
   shouldLabelStar,
   starRadius,
+  starRadiusForMagnitude,
 } from './chart-model.mjs';
 
 const ILLUSTRATOR_PX_PER_IN = 72;
@@ -63,6 +66,50 @@ const SCORPIO_INSET = {
   paddingTop: 78,
   paddingBottom: 66,
 };
+
+export const MAIN_STAR_CHART_ID = 'main';
+
+export const INSET_STAR_CHARTS = {
+  scorpio: {
+    id: 'scorpio',
+    aliases: ['scorpius'],
+    title: 'Scorpio',
+    layerName: 'Scorpio Gaia DR3 inset',
+    outputFileName: 'scorpio-inset.svg',
+    bounds: SCORPIO_BOUNDS,
+    inset: SCORPIO_INSET,
+  },
+  pleiades: {
+    id: 'pleiades',
+    aliases: ['pleiades-m45', 'm45'],
+    title: 'Pleiades Cluster (M45)',
+    layerName: 'Pleiades Cluster M45 inset',
+    outputFileName: 'pleiades-m45-inset.svg',
+    bounds: PLEIADES_M45_BOUNDS,
+    inset: PLEIADES_INSET,
+  },
+};
+
+export const STAR_CHART_IDS = [
+  MAIN_STAR_CHART_ID,
+  ...Object.keys(INSET_STAR_CHARTS),
+];
+
+export function normalizeStarChartId(chartId) {
+  const normalized = String(chartId ?? MAIN_STAR_CHART_ID).trim().toLowerCase();
+  if (normalized === MAIN_STAR_CHART_ID) return MAIN_STAR_CHART_ID;
+
+  for (const chart of Object.values(INSET_STAR_CHARTS)) {
+    if (normalized === chart.id || chart.aliases.includes(normalized)) return chart.id;
+  }
+
+  return null;
+}
+
+export function getInsetStarChart(chartId) {
+  const normalized = normalizeStarChartId(chartId);
+  return normalized ? INSET_STAR_CHARTS[normalized] ?? null : null;
+}
 
 function number(value) {
   return Math.round(value * 100) / 100;
@@ -178,6 +225,37 @@ function renderLabels(stars) {
     lines.push(
       `    <text id="label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y - 7)}">${escapeXml(labelForStar(star))}</text>`,
     );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderMagnitudeScale(width, height, padding) {
+  const scaleWidth = 520;
+  const xStart = width - padding - scaleWidth;
+  const xEnd = width - padding;
+  const y = height - 22;
+  const labelY = y + 14;
+  const titleX = xStart - 168;
+  const radiusForMagnitude = (magnitude) => {
+    const brightScale = magnitude <= 4.2 ? 1.05 : 1;
+    return starRadiusForMagnitude(magnitude) * brightScale * SVG_RADIUS_SCALE;
+  };
+  const lines = [
+    `  <g id="magnitude-scale" font-family="Arial, Helvetica, sans-serif">`,
+    `    <text x="${number(titleX)}" y="${number(y + 5)}" fill="${PRINT_CHART.text}" fill-opacity="0.9" font-size="14" font-weight="700">visual magnitude</text>`,
+    `    <line x1="${number(xStart)}" y1="${number(y)}" x2="${number(xEnd)}" y2="${number(y)}" stroke="${PRINT_CHART.mutedText}" stroke-opacity="0.42" stroke-width="1" />`,
+  ];
+
+  for (const magnitude of MAGNITUDE_SCALE_TICKS) {
+    const x = xStart + ((magnitude + 1) / (DEFAULT_MAG_LIMIT + 1)) * scaleWidth;
+    const radius = radiusForMagnitude(magnitude);
+    const strokeWidth = Math.max(0.08, Math.min(0.18, radius * 0.14));
+    lines.push(
+      `    <circle cx="${number(x)}" cy="${number(y)}" r="${number(radius)}" fill="${colorForStar({ mag: magnitude })}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`,
+    );
+    lines.push(`    <text x="${number(x)}" y="${number(labelY)}" fill="${PRINT_CHART.mutedText}" fill-opacity="0.78" font-size="10" text-anchor="middle">${magnitude}</text>`);
   }
 
   lines.push('  </g>');
@@ -384,47 +462,34 @@ function renderGaiaInset({ idPrefix, layerName, title, inset, bounds, stars = []
   ].join('\n');
 }
 
-export function renderStarChartSvg(dataset, options = {}) {
-  const documentWidth = PRINT_CHART.widthIn * PRINT_CHART.unitsPerIn;
-  const documentHeight = PRINT_CHART.heightIn * PRINT_CHART.unitsPerIn;
+function renderSvgDocument({ widthIn, heightIn, title, desc, ariaLabel, xmlDeclaration = false, parts }) {
+  const documentWidth = widthIn * PRINT_CHART.unitsPerIn;
+  const documentHeight = heightIn * PRINT_CHART.unitsPerIn;
+  const lines = [];
+
+  if (xmlDeclaration) lines.push('<?xml version="1.0" encoding="UTF-8"?>');
+
+  lines.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${widthIn}in" height="${heightIn}in" viewBox="0 0 ${documentWidth} ${documentHeight}" role="img" aria-label="${escapeXml(ariaLabel)}">`,
+    `  <title>${escapeXml(title)}</title>`,
+    `  <desc>${escapeXml(desc)}</desc>`,
+    ...parts,
+    '</svg>',
+    '',
+  );
+
+  return lines.join('\n');
+}
+
+function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
   const width = DEFAULT_CHART.width;
   const height = DEFAULT_CHART.height;
-  const chartX = DEFAULT_CHART.x;
-  const chartY = DEFAULT_CHART.y;
   const padding = DEFAULT_CHART.padding;
   const brightStars = dataset.stars.filter((star) => star.mag <= 4.2);
   const dimStars = dataset.stars.filter((star) => star.mag > 4.2);
   const labels = dataset.stars.filter(shouldLabelStar);
-  const parts = [];
-
-  if (options.xmlDeclaration) parts.push('<?xml version="1.0" encoding="UTF-8"?>');
-
-  parts.push(
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${PRINT_CHART.widthIn}in" height="${PRINT_CHART.heightIn}in" viewBox="0 0 ${documentWidth} ${documentHeight}" role="img" aria-label="HYG v4.2 all-sky star chart">`,
-    '  <title>HYG Star Chart</title>',
-    `  <desc>HYG v4.2 star chart, magnitude &lt;= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper area contains separate Gaia DR3 inset layers for Scorpio and the Pleiades Cluster M45.</desc>`,
-    '  <g id="background">',
-    `    <rect width="${documentWidth}" height="${documentHeight}" fill="${PRINT_CHART.background}" />`,
-    '  </g>',
-    '  <g id="top-data-area" data-purpose="Reserved for additional data and smaller charts">',
-    `    <rect x="0" y="0" width="${documentWidth}" height="${chartY}" fill="none" />`,
-    '  </g>',
-    renderGaiaInset({
-      idPrefix: 'scorpio',
-      layerName: 'Scorpio Gaia DR3 inset',
-      title: 'Scorpio',
-      inset: SCORPIO_INSET,
-      bounds: SCORPIO_BOUNDS,
-      stars: options.scorpioStars,
-    }),
-    renderGaiaInset({
-      idPrefix: 'pleiades-m45',
-      layerName: 'Pleiades Cluster M45 inset',
-      title: 'Pleiades Cluster (M45)',
-      inset: PLEIADES_INSET,
-      bounds: PLEIADES_M45_BOUNDS,
-      stars: options.pleiadesStars,
-    }),
+  const transform = chartX || chartY ? ` transform="translate(${chartX} ${chartY})"` : '';
+  const parts = [
     `  <g id="equirectangular-star-chart" transform="translate(${chartX} ${chartY})">`,
     '  <g id="chart-background">',
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
@@ -441,13 +506,121 @@ export function renderStarChartSvg(dataset, options = {}) {
     `  <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
     `    <text x="${padding}" y="${height - 24}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / ${dataset.count.toLocaleString()} stars</text>`,
     '  </g>',
+    renderMagnitudeScale(width, height, padding),
     '  </g>',
-    '</svg>',
-    '',
-  );
+  ];
+
+  parts[0] = `  <g id="equirectangular-star-chart"${transform}>`;
 
   return {
     svg: parts.join('\n'),
     labelCount: labels.length,
   };
+}
+
+export function renderMainStarChartSvg(dataset, options = {}) {
+  const { svg, labelCount } = renderMainStarChartLayer(dataset);
+
+  return {
+    svg: renderSvgDocument({
+      widthIn: PRINT_CHART.chartWidthIn,
+      heightIn: PRINT_CHART.chartHeightIn,
+      title: 'HYG Star Chart',
+      ariaLabel: 'HYG v4.2 all-sky star chart',
+      desc: `HYG v4.2 equirectangular all-sky star chart, magnitude <= ${dataset.magLimit}, generated for Illustrator editing.`,
+      xmlDeclaration: options.xmlDeclaration,
+      parts: [svg],
+    }),
+    labelCount,
+  };
+}
+
+export function renderInsetStarChartSvg(chartId, stars = [], options = {}) {
+  const chart = getInsetStarChart(chartId);
+  if (!chart) {
+    throw new Error(`Unknown inset star chart "${chartId}". Use one of: ${Object.keys(INSET_STAR_CHARTS).join(', ')}.`);
+  }
+
+  const inset = {
+    ...chart.inset,
+    x: 0,
+    y: 0,
+  };
+
+  return {
+    svg: renderSvgDocument({
+      widthIn: inset.width / PRINT_CHART.unitsPerIn,
+      heightIn: inset.height / PRINT_CHART.unitsPerIn,
+      title: `${chart.title} Inset`,
+      ariaLabel: `${chart.title} inset star chart`,
+      desc: `${chart.title} chart using Gaia DR3 sources, bounded by RA ${formatRaLabel(chart.bounds.raMin)} to ${formatRaLabel(chart.bounds.raMax)} and Dec ${formatDecLabel(chart.bounds.decMin)} to ${formatDecLabel(chart.bounds.decMax)}, Gaia G <= ${chart.bounds.magLimit}.`,
+      xmlDeclaration: options.xmlDeclaration,
+      parts: [
+        renderGaiaInset({
+          idPrefix: chart.id === 'pleiades' ? 'pleiades-m45' : chart.id,
+          layerName: chart.layerName,
+          title: chart.title,
+          inset,
+          bounds: chart.bounds,
+          stars,
+        }),
+      ],
+    }),
+    starCount: stars.length,
+  };
+}
+
+export function renderCompositeStarChartSvg(dataset, options = {}) {
+  const documentWidth = PRINT_CHART.widthIn * PRINT_CHART.unitsPerIn;
+  const chartY = DEFAULT_CHART.y;
+  const { svg: mainChartSvg, labelCount } = renderMainStarChartLayer(dataset, {
+    chartX: DEFAULT_CHART.x,
+    chartY: DEFAULT_CHART.y,
+  });
+
+  return {
+    svg: renderSvgDocument({
+      widthIn: PRINT_CHART.widthIn,
+      heightIn: PRINT_CHART.heightIn,
+      title: 'HYG Star Chart',
+      ariaLabel: 'HYG v4.2 all-sky star chart',
+      desc: `HYG v4.2 star chart, magnitude <= ${dataset.magLimit}, generated for Illustrator editing. The lower 24 x 12 inch portion contains the equirectangular chart; the upper area contains separate Gaia DR3 inset layers for Scorpio and the Pleiades Cluster M45.`,
+      xmlDeclaration: options.xmlDeclaration,
+      parts: [
+        '  <g id="background">',
+        `    <rect width="${documentWidth}" height="${PRINT_CHART.heightIn * PRINT_CHART.unitsPerIn}" fill="${PRINT_CHART.background}" />`,
+        '  </g>',
+        '  <g id="top-data-area" data-purpose="Reserved for additional data and smaller charts">',
+        `    <rect x="0" y="0" width="${documentWidth}" height="${chartY}" fill="none" />`,
+        '  </g>',
+        renderGaiaInset({
+          idPrefix: 'scorpio',
+          layerName: INSET_STAR_CHARTS.scorpio.layerName,
+          title: INSET_STAR_CHARTS.scorpio.title,
+          inset: INSET_STAR_CHARTS.scorpio.inset,
+          bounds: INSET_STAR_CHARTS.scorpio.bounds,
+          stars: options.scorpioStars,
+        }),
+        renderGaiaInset({
+          idPrefix: 'pleiades-m45',
+          layerName: INSET_STAR_CHARTS.pleiades.layerName,
+          title: INSET_STAR_CHARTS.pleiades.title,
+          inset: INSET_STAR_CHARTS.pleiades.inset,
+          bounds: INSET_STAR_CHARTS.pleiades.bounds,
+          stars: options.pleiadesStars,
+        }),
+        mainChartSvg,
+      ],
+    }),
+    labelCount,
+  };
+}
+
+export function renderStarChartSvg(dataset, options = {}) {
+  if (options.chartId || options.chart) {
+    const chartId = normalizeStarChartId(options.chartId ?? options.chart);
+    if (chartId === MAIN_STAR_CHART_ID) return renderMainStarChartSvg(dataset, options);
+  }
+
+  return renderCompositeStarChartSvg(dataset, options);
 }

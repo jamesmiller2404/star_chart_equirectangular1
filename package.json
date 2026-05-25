@@ -10,7 +10,10 @@
     "build:data": "node scripts/build-star-chart-data.mjs",
     "fetch:pleiades": "node scripts/fetch-pleiades-gaia.mjs",
     "fetch:scorpio": "node scripts/fetch-scorpio-gaia.mjs",
-    "export:svg": "node scripts/export-svg.mjs"
+    "export:svg": "node scripts/export-svg.mjs",
+    "export:svg:main": "node scripts/export-svg.mjs --chart main",
+    "export:svg:pleiades": "node scripts/export-svg.mjs --chart pleiades",
+    "export:svg:scorpio": "node scripts/export-svg.mjs --chart scorpio"
   },
   "dependencies": {
     "next": "^15.3.0",

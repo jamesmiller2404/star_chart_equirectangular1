@@ -140,6 +140,7 @@ export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
 export const DEFAULT_RADIUS_COMPRESSION = 1.2;
 export const RADIUS_TAIL_PORTION = 0.2;
+export const MAGNITUDE_SCALE_TICKS = [-1, 0, 2, 4, 6, DEFAULT_MAG_LIMIT];
 
 function smoothstep(value) {
   return value * value * (3 - 2 * value);

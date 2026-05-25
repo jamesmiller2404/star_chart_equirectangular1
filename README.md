@@ -27,6 +27,26 @@ This is the original focus of this data collection. HYG combines every identifia
 
 The current HYG catalog is v4.2. Versions since v4.0 are licensed as above (CC-BY-SA 4.0). Earlier versions use the CC-BY-SA v2.5 license.
 
+### SVG chart exports
+
+The main all-sky chart and Gaia inset charts are generated as separate SVG targets:
+
+```bash
+npm run export:svg:main
+npm run export:svg:pleiades
+npm run export:svg:scorpio
+```
+
+You can also choose a target manually:
+
+```bash
+npm run export:svg -- --chart main
+npm run export:svg -- --chart pleiades --output exports/pleiades.svg
+npm run export:svg -- --chart all
+```
+
+The print preview accepts the same chart IDs at `/print?chart=main`, `/print?chart=pleiades`, and `/print?chart=scorpio`.
+
 The previous version series, v3.x, was originally compiled in 2014. There have been a few notable changes since then, mostly to add additional ID/label information and to correct a few errors. The most significant was a change in March 2023, to merge a PR that added the official star names from the IAU Working Group on Star Names in 2018, as well as to add a few additional old catalog designations for some nearby stars (e.g., "Ross 128") that may as well be proper names at this point. Details of the version history are in data/hyg/version-info.md.
 
 The final version of v3, v3.8, has only very minor differences from v4.2 in data content; the major version update (v3->4)  was done largely to make updated licensing easier. 

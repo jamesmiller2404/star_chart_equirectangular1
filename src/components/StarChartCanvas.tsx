@@ -16,6 +16,7 @@ import {
   DIM_STAR_OPACITY,
   GRID_OPACITY,
   labelForStar,
+  MAGNITUDE_SCALE_TICKS,
   pointForStar,
   starRadius,
   starRadiusForMagnitude,
@@ -105,6 +106,8 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
           });
         }
       }
+
+      drawMagnitudeScale(context, width, height, padding, dpr, radiusCompression);
     }
 
     draw();
@@ -322,4 +325,60 @@ function drawGrid(context: CanvasRenderingContext2D, width: number, height: numb
     context.textAlign = 'left';
     context.fillText(`${dec > 0 ? '+' : ''}${dec}`, width - padding + 8, y);
   }
+}
+
+function drawMagnitudeScale(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  padding: number,
+  dpr: number,
+  radiusCompression: number,
+) {
+  const scaleWidth = Math.min(360 * dpr, Math.max(240 * dpr, width * 0.28));
+  const xStart = Math.max(padding, width - padding - scaleWidth);
+  const xEnd = width - padding;
+  const y = height - Math.max(16 * dpr, padding * 0.34);
+  const labelY = y + 12 * dpr;
+  const titleY = y - 10 * dpr;
+  const labelFontSize = Math.max(9 * dpr, Math.min(12 * dpr, width / 150));
+  const titleFontSize = Math.max(10 * dpr, Math.min(13 * dpr, width / 135));
+
+  context.save();
+  context.globalAlpha = 1;
+  context.textBaseline = 'middle';
+  context.textAlign = 'left';
+  context.fillStyle = 'rgba(238, 243, 248, 0.9)';
+  context.font = `600 ${titleFontSize}px system-ui, sans-serif`;
+  context.fillText('visual magnitude', xStart, titleY);
+
+  context.strokeStyle = 'rgba(174, 184, 199, 0.42)';
+  context.lineWidth = Math.max(1, dpr);
+  context.beginPath();
+  context.moveTo(xStart, y);
+  context.lineTo(xEnd, y);
+  context.stroke();
+
+  context.fillStyle = 'rgba(174, 184, 199, 0.78)';
+  context.font = `${labelFontSize}px system-ui, sans-serif`;
+  context.textAlign = 'center';
+
+  for (const magnitude of MAGNITUDE_SCALE_TICKS) {
+    const x = xStart + ((magnitude + 1) / (DEFAULT_MAG_LIMIT + 1)) * scaleWidth;
+    const radius = starRadiusForMagnitude(magnitude, radiusCompression) * dpr;
+    const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
+
+    context.beginPath();
+    context.fillStyle = '#f2f2f2';
+    context.strokeStyle = '#05070b';
+    context.lineWidth = outline;
+    context.arc(x, y, radius, 0, Math.PI * 2);
+    context.fill();
+    context.stroke();
+
+    context.fillStyle = 'rgba(174, 184, 199, 0.78)';
+    context.fillText(magnitude.toString(), x, labelY);
+  }
+
+  context.restore();
 }
