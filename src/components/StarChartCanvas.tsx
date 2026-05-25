@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   colorForStar,
+  BRIGHT_STAR_MAGNITUDE_LIMIT,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   CONSTELLATION_LABEL_OPACITY,
@@ -22,6 +23,7 @@ import {
   MAGNITUDE_SCALE_TICKS,
   pointForCoordinates,
   pointForStar,
+  renderedStarRadiusScaleForMagnitude,
   starRadius,
   starRadiusForMagnitude,
 } from '@/src/chart/chart-model.mjs';
@@ -91,11 +93,11 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       for (let i = dataset.stars.length - 1; i >= 0; i -= 1) {
         const star = dataset.stars[i];
         const point = pointForStar(star, width, height, padding);
-        const radius = starRadius(star, star.mag <= 4.2 ? dpr * 2.1 : dpr, radiusCompression);
+        const radius = starRadius(star, dpr * renderedStarRadiusScaleForMagnitude(star.mag), radiusCompression);
         const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
         context.beginPath();
-        context.globalAlpha = star.mag > 4.2 ? DIM_STAR_OPACITY : 1;
+        context.globalAlpha = star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT ? DIM_STAR_OPACITY : 1;
         context.fillStyle = colorForStar(star);
         context.strokeStyle = '#05070b';
         context.lineWidth = outline;
@@ -104,7 +106,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
         context.stroke();
         context.globalAlpha = 1;
 
-        if (star.mag <= 4.2 || star.proper) {
+        if (star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT || star.proper) {
           hoverTargets.current.push({
             ...point,
             radius: Math.max(radius + 6 * dpr, 8 * dpr),
@@ -439,7 +441,9 @@ function drawMagnitudeScale(
 
   for (const magnitude of MAGNITUDE_SCALE_TICKS) {
     const x = xStart + ((magnitude + 1) / (DEFAULT_MAG_LIMIT + 1)) * scaleWidth;
-    const radius = starRadiusForMagnitude(magnitude, radiusCompression) * dpr;
+    const radius = starRadiusForMagnitude(magnitude, radiusCompression)
+      * renderedStarRadiusScaleForMagnitude(magnitude)
+      * dpr;
     const outline = Math.max(0.08 * dpr, Math.min(0.18 * dpr, radius * 0.14));
 
     context.beginPath();

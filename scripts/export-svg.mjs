@@ -4,12 +4,15 @@ import { fileURLToPath } from 'node:url';
 import {
   INSET_STAR_CHARTS,
   MAIN_STAR_CHART_ID,
+  POLAR_STAR_CHARTS,
   STAR_CHART_IDS,
   getInsetStarChart,
+  getPolarStarChart,
   isCoordinateInsideInsetBounds,
   normalizeStarChartId,
   renderInsetStarChartSvg,
   renderMainStarChartSvg,
+  renderPolarStarChartSvg,
 } from '../src/chart/render-svg.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -35,6 +38,8 @@ const inputCandidates = [
 ];
 const defaultOutputPaths = {
   main: path.join(root, 'exports', 'hyg-star-chart-main-24x12.svg'),
+  'north-polar': path.join(root, 'exports', POLAR_STAR_CHARTS['north-polar'].outputFileName),
+  'south-polar': path.join(root, 'exports', POLAR_STAR_CHARTS['south-polar'].outputFileName),
   pleiades: path.join(root, 'exports', INSET_STAR_CHARTS.pleiades.outputFileName),
   scorpio: path.join(root, 'exports', INSET_STAR_CHARTS.scorpio.outputFileName),
   lyra: path.join(root, 'exports', INSET_STAR_CHARTS.lyra.outputFileName),
@@ -42,10 +47,12 @@ const defaultOutputPaths = {
 
 function usage() {
   return [
-    'Usage: npm run export:svg -- [--chart main|pleiades|scorpio|lyra|all] [--output path]',
+    'Usage: npm run export:svg -- [--chart main|north-polar|south-polar|pleiades|scorpio|lyra|all] [--output path]',
     '',
     'Examples:',
     '  npm run export:svg -- --chart main',
+    '  npm run export:svg -- --chart north-polar',
+    '  npm run export:svg -- --chart south-polar',
     '  npm run export:svg -- --chart pleiades',
     '  npm run export:svg -- --chart scorpio --output exports/scorpio.svg',
     '  npm run export:svg -- --chart lyra',
@@ -104,7 +111,7 @@ function selectedChartIds(chartOption) {
 
   const chartId = normalizeStarChartId(normalizedOption);
   if (!chartId) {
-    throw new Error(`Unknown chart "${chartOption}". Use main, pleiades, scorpio, lyra, or all.`);
+    throw new Error(`Unknown chart "${chartOption}". Use main, north-polar, south-polar, pleiades, scorpio, lyra, or all.`);
   }
 
   return [chartId];
@@ -223,6 +230,15 @@ for (const chartId of chartIds) {
     if (dataset.constellations) {
       console.log(`Main chart contains ${dataset.constellations.count} constellation line groups.`);
     }
+    continue;
+  }
+
+  const polarChart = getPolarStarChart(chartId);
+  if (polarChart) {
+    const dataset = await readDataset();
+    const { svg, starCount, labelCount } = renderPolarStarChartSvg(chartId, dataset, { xmlDeclaration: true });
+    await writeSvg(outputPath, svg);
+    console.log(`${polarChart.title} contains ${starCount} HYG v4.2 stars to magnitude ${dataset.magLimit} and ${labelCount} editable labels.`);
     continue;
   }
 

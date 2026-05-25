@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import {
+  BRIGHT_STAR_MAGNITUDE_LIMIT,
   colorForStar,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
@@ -25,6 +26,7 @@ import {
   pointForCoordinates,
   pointForStar,
   PRINT_CHART,
+  renderedStarRadiusScaleForMagnitude,
   shouldLabelBayerStar,
   shouldLabelStar,
   starRadius,
@@ -167,6 +169,27 @@ const SCORPIO_INSET = {
 
 export const MAIN_STAR_CHART_ID = 'main';
 
+export const POLAR_STAR_CHARTS = {
+  'north-polar': {
+    id: 'north-polar',
+    aliases: ['north', 'northern', 'northern-polar', 'northern-hemisphere'],
+    title: 'Northern Polar Star Chart',
+    outputFileName: 'hyg-northern-polar-star-chart.svg',
+    decMin: 50,
+    decMax: 90,
+    poleDec: 90,
+  },
+  'south-polar': {
+    id: 'south-polar',
+    aliases: ['south', 'southern', 'southern-polar', 'southern-hemisphere'],
+    title: 'Southern Polar Star Chart',
+    outputFileName: 'hyg-southern-polar-star-chart.svg',
+    decMin: -90,
+    decMax: -50,
+    poleDec: -90,
+  },
+};
+
 export const INSET_STAR_CHARTS = {
   scorpio: {
     id: 'scorpio',
@@ -203,12 +226,17 @@ export const INSET_STAR_CHARTS = {
 
 export const STAR_CHART_IDS = [
   MAIN_STAR_CHART_ID,
+  ...Object.keys(POLAR_STAR_CHARTS),
   ...Object.keys(INSET_STAR_CHARTS),
 ];
 
 export function normalizeStarChartId(chartId) {
   const normalized = String(chartId ?? MAIN_STAR_CHART_ID).trim().toLowerCase();
   if (normalized === MAIN_STAR_CHART_ID) return MAIN_STAR_CHART_ID;
+
+  for (const chart of Object.values(POLAR_STAR_CHARTS)) {
+    if (normalized === chart.id || chart.aliases.includes(normalized)) return chart.id;
+  }
 
   for (const chart of Object.values(INSET_STAR_CHARTS)) {
     if (normalized === chart.id || chart.aliases.includes(normalized)) return chart.id;
@@ -220,6 +248,11 @@ export function normalizeStarChartId(chartId) {
 export function getInsetStarChart(chartId) {
   const normalized = normalizeStarChartId(chartId);
   return normalized ? INSET_STAR_CHARTS[normalized] ?? null : null;
+}
+
+export function getPolarStarChart(chartId) {
+  const normalized = normalizeStarChartId(chartId);
+  return normalized ? POLAR_STAR_CHARTS[normalized] ?? null : null;
 }
 
 function number(value) {
@@ -630,8 +663,9 @@ function renderMagnitudeScale(width, height, padding) {
   const labelY = y + 14;
   const titleX = xStart - 168;
   const radiusForMagnitude = (magnitude) => {
-    const brightScale = magnitude <= 4.2 ? 1.05 : 1;
-    return starRadiusForMagnitude(magnitude) * brightScale * SVG_RADIUS_SCALE;
+    return starRadiusForMagnitude(magnitude)
+      * renderedStarRadiusScaleForMagnitude(magnitude)
+      * SVG_RADIUS_SCALE;
   };
   const lines = [
     `  <g id="magnitude-scale" font-family="Arial, Helvetica, sans-serif">`,
@@ -1184,12 +1218,150 @@ function renderSvgDocument({ widthIn, heightIn, title, desc, ariaLabel, xmlDecla
   return lines.join('\n');
 }
 
+const POLAR_CHART = {
+  widthIn: 12,
+  heightIn: 12,
+  padding: 90,
+};
+
+function polarChartSize() {
+  return {
+    width: POLAR_CHART.widthIn * PRINT_CHART.unitsPerIn,
+    height: POLAR_CHART.heightIn * PRINT_CHART.unitsPerIn,
+  };
+}
+
+function polarRadiusForDec(dec, chart, radius) {
+  if (chart.poleDec > 0) return ((chart.decMax - dec) / (chart.decMax - chart.decMin)) * radius;
+  return ((dec - chart.decMin) / (chart.decMax - chart.decMin)) * radius;
+}
+
+function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
+  const angle = (ra / 24) * Math.PI * 2;
+  const r = polarRadiusForDec(dec, chart, radius);
+  return {
+    x: centerX + Math.sin(angle) * r,
+    y: centerY - Math.cos(angle) * r,
+  };
+}
+
+function isStarInsidePolarChart(star, chart) {
+  return star.mag <= DEFAULT_MAG_LIMIT && star.dec >= chart.decMin && star.dec <= chart.decMax;
+}
+
+function renderPolarGrid(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="polar-grid" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
+  ];
+
+  for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
+    const circleRadius = polarRadiusForDec(dec, chart, radius);
+    lines.push(`    <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(circleRadius)}" />`);
+  }
+
+  for (const hour of createRaTicks(1)) {
+    if (hour === 24) continue;
+    const edge = polarPointForCoordinates(hour, chart.poleDec > 0 ? chart.decMin : chart.decMax, chart, centerX, centerY, radius);
+    lines.push(`    <line x1="${number(centerX)}" y1="${number(centerY)}" x2="${number(edge.x)}" y2="${number(edge.y)}" />`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarGridLabels(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="polar-grid-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
+  ];
+
+  for (const hour of createRaTicks(1)) {
+    if (hour === 24) continue;
+    const point = polarPointForCoordinates(hour, chart.poleDec > 0 ? chart.decMin : chart.decMax, chart, centerX, centerY, radius + 28);
+    lines.push(`    <text x="${number(point.x)}" y="${number(point.y + 6)}" text-anchor="middle">${hour}h</text>`);
+  }
+
+  for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
+    const circleRadius = polarRadiusForDec(dec, chart, radius);
+    lines.push(`    <text x="${number(centerX + circleRadius + 8)}" y="${number(centerY - 5)}">${dec > 0 ? '+' : ''}${dec}°</text>`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarStars(chart, stars, centerX, centerY, radius) {
+  const brightStars = stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
+  const dimStars = stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
+
+  function renderGroup(id, groupStars, scale, opacity = 1) {
+    const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
+    const lines = [`  <g id="${id}"${opacityAttribute}>`];
+    for (const star of [...groupStars].sort((a, b) => b.mag - a.mag)) {
+      const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
+      const starPointRadius = starRadius(star, scale) * SVG_RADIUS_SCALE;
+      const strokeWidth = Math.max(0.08, Math.min(0.18, starPointRadius * 0.14));
+      lines.push(`    <circle id="star-${star.id}" cx="${number(point.x)}" cy="${number(point.y)}" r="${number(starPointRadius)}" fill="${colorForStar(star)}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`);
+    }
+    lines.push('  </g>');
+    return lines.join('\n');
+  }
+
+  return [
+    renderGroup('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
+    renderGroup('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT)),
+  ].join('\n');
+}
+
+function renderPolarStarLabels(chart, stars, centerX, centerY, radius) {
+  const labelStars = stars.filter(shouldLabelStar);
+  const lines = [
+    `  <g id="star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
+  ];
+
+  for (const star of labelStars) {
+    const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
+    lines.push(`    <text id="star-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y - 6)}">${escapeXml(labelForStar(star))}</text>`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarStarChartLayer(dataset, chart) {
+  const { width, height } = polarChartSize();
+  const centerX = width / 2;
+  const centerY = height / 2;
+  const radius = Math.min(width, height) / 2 - POLAR_CHART.padding;
+  const stars = dataset.stars.filter((star) => isStarInsidePolarChart(star, chart));
+  const decSummary = `${chart.decMin > 0 ? '+' : ''}${chart.decMin}° to ${chart.decMax > 0 ? '+' : ''}${chart.decMax}°`;
+
+  return {
+    svg: [
+      `  <g id="${chart.id}-star-chart">`,
+      `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
+      renderPolarGrid(chart, centerX, centerY, radius),
+      renderPolarGridLabels(chart, centerX, centerY, radius),
+      renderPolarStars(chart, stars, centerX, centerY, radius),
+      renderPolarStarLabels(chart, stars, centerX, centerY, radius),
+      `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
+      `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius)}" />`,
+      '    </g>',
+      `    <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
+      `      <text x="${POLAR_CHART.padding}" y="${height - 34}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / declination ${escapeXml(decSummary)} / ${stars.length.toLocaleString()} stars</text>`,
+      '    </g>',
+      '  </g>',
+    ].join('\n'),
+    starCount: stars.length,
+    labelCount: stars.filter(shouldLabelStar).length,
+  };
+}
+
 function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
   const width = DEFAULT_CHART.width;
   const height = DEFAULT_CHART.height;
   const padding = DEFAULT_CHART.padding;
-  const brightStars = dataset.stars.filter((star) => star.mag <= 4.2);
-  const dimStars = dataset.stars.filter((star) => star.mag > 4.2);
+  const brightStars = dataset.stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
+  const dimStars = dataset.stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
   const labels = dataset.stars.filter(shouldLabelStar);
   const nameLabels = labels.filter((star) => star.proper);
   const bayerLabels = dataset.stars.filter(shouldLabelBayerStar);
@@ -1207,7 +1379,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
     renderConstellationLines(dataset),
     renderConstellationLabels(dataset),
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
-    renderStars('stars-bright', brightStars, 2.1),
+    renderStars('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT)),
     renderStarNameLabels(nameLabels),
     renderBayerDesignationLabels(bayerLabels),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
@@ -1241,6 +1413,29 @@ export function renderMainStarChartSvg(dataset, options = {}) {
       xmlDeclaration: options.xmlDeclaration,
       parts: [svg],
     }),
+    labelCount,
+  };
+}
+
+export function renderPolarStarChartSvg(chartId, dataset, options = {}) {
+  const chart = getPolarStarChart(chartId);
+  if (!chart) {
+    throw new Error(`Unknown polar star chart "${chartId}". Use one of: ${Object.keys(POLAR_STAR_CHARTS).join(', ')}.`);
+  }
+
+  const { svg, starCount, labelCount } = renderPolarStarChartLayer(dataset, chart);
+
+  return {
+    svg: renderSvgDocument({
+      widthIn: POLAR_CHART.widthIn,
+      heightIn: POLAR_CHART.heightIn,
+      title: chart.title,
+      ariaLabel: `${chart.title} using HYG v4.2 stars`,
+      desc: `${chart.title}, polar projection by right ascension and declination, HYG v4.2 magnitude <= ${dataset.magLimit}, declination ${chart.decMin} to ${chart.decMax}.`,
+      xmlDeclaration: options.xmlDeclaration,
+      parts: [svg],
+    }),
+    starCount,
     labelCount,
   };
 }
@@ -1346,6 +1541,7 @@ export function renderStarChartSvg(dataset, options = {}) {
   if (options.chartId || options.chart) {
     const chartId = normalizeStarChartId(options.chartId ?? options.chart);
     if (chartId === MAIN_STAR_CHART_ID) return renderMainStarChartSvg(dataset, options);
+    if (getPolarStarChart(chartId)) return renderPolarStarChartSvg(chartId, dataset, options);
   }
 
   return renderCompositeStarChartSvg(dataset, options);

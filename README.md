@@ -33,6 +33,8 @@ The main all-sky chart and Gaia inset charts are generated as separate SVG targe
 
 ```bash
 npm run export:svg:main
+npm run export:svg:north
+npm run export:svg:south
 npm run export:svg:pleiades
 npm run export:svg:scorpio
 npm run export:svg:lyra
@@ -42,12 +44,14 @@ You can also choose a target manually:
 
 ```bash
 npm run export:svg -- --chart main
+npm run export:svg -- --chart north-polar
+npm run export:svg -- --chart south-polar
 npm run export:svg -- --chart pleiades --output exports/pleiades.svg
 npm run export:svg -- --chart lyra --output exports/lyra.svg
 npm run export:svg -- --chart all
 ```
 
-The print preview accepts the same chart IDs at `/print?chart=main`, `/print?chart=pleiades`, `/print?chart=scorpio`, and `/print?chart=lyra`.
+The polar charts use the HYG v4.2 magnitude 6.5 dataset and cover declination +50° to +90° or -50° to -90°. The print preview accepts the same chart IDs at `/print?chart=main`, `/print?chart=north-polar`, `/print?chart=south-polar`, `/print?chart=pleiades`, `/print?chart=scorpio`, and `/print?chart=lyra`.
 
 The previous version series, v3.x, was originally compiled in 2014. There have been a few notable changes since then, mostly to add additional ID/label information and to correct a few errors. The most significant was a change in March 2023, to merge a PR that added the official star names from the IAU Working Group on Star Names in 2018, as well as to add a few additional old catalog designations for some nearby stars (e.g., "Ross 128") that may as well be proper names at this point. Details of the version history are in data/hyg/version-info.md.
 

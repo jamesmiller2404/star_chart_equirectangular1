@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { loadStarDataset } from '@/src/data/load-stars';
 import { loadGaiaInsetStars } from '@/src/data/load-gaia-inset-stars';
 import { StarChartSvg } from '@/src/components/StarChartSvg';
-import { INSET_STAR_CHARTS, MAIN_STAR_CHART_ID, normalizeStarChartId } from '@/src/chart/render-svg.mjs';
+import { INSET_STAR_CHARTS, MAIN_STAR_CHART_ID, POLAR_STAR_CHARTS, getPolarStarChart, normalizeStarChartId } from '@/src/chart/render-svg.mjs';
 
 type PrintPageProps = {
   searchParams?: Promise<{
@@ -14,10 +14,12 @@ export default async function PrintPage({ searchParams }: PrintPageProps) {
   const params = await searchParams;
   const chartId = normalizeStarChartId(params?.chart) ?? MAIN_STAR_CHART_ID;
   const isMainChart = chartId === MAIN_STAR_CHART_ID;
-  const dataset = isMainChart ? await loadStarDataset() : undefined;
-  const insetStars = isMainChart ? [] : await loadGaiaInsetStars(chartId);
-  const chartTitle = isMainChart ? 'Main Star Chart' : `${INSET_STAR_CHARTS[chartId].title} Inset`;
-  const chartSize = isMainChart ? '24in x 12in' : 'standalone inset SVG';
+  const polarChart = getPolarStarChart(chartId);
+  const isHygChart = isMainChart || Boolean(polarChart);
+  const dataset = isHygChart ? await loadStarDataset() : undefined;
+  const insetStars = isHygChart ? [] : await loadGaiaInsetStars(chartId);
+  const chartTitle = isMainChart ? 'Main Star Chart' : polarChart ? polarChart.title : `${INSET_STAR_CHARTS[chartId].title} Inset`;
+  const chartSize = isMainChart ? '24in x 12in' : polarChart ? '12in x 12in' : 'standalone inset SVG';
 
   return (
     <main className="print-shell">
@@ -32,6 +34,12 @@ export default async function PrintPage({ searchParams }: PrintPageProps) {
           <Link href="/">Preview</Link>
           <Link href="/print?chart=main" aria-current={chartId === MAIN_STAR_CHART_ID ? 'page' : undefined}>
             Main
+          </Link>
+          <Link href="/print?chart=north-polar" aria-current={chartId === POLAR_STAR_CHARTS['north-polar'].id ? 'page' : undefined}>
+            North Polar
+          </Link>
+          <Link href="/print?chart=south-polar" aria-current={chartId === POLAR_STAR_CHARTS['south-polar'].id ? 'page' : undefined}>
+            South Polar
           </Link>
           <Link href="/print?chart=pleiades" aria-current={chartId === 'pleiades' ? 'page' : undefined}>
             Pleiades
@@ -48,6 +56,7 @@ export default async function PrintPage({ searchParams }: PrintPageProps) {
       <div className="meta-row">
         {dataset ? <span className="meta-pill">{dataset.count.toLocaleString()} stars</span> : null}
         {dataset?.constellations ? <span className="meta-pill">{dataset.constellations.count} constellations</span> : null}
+        {polarChart && dataset ? <span className="meta-pill">{dataset.stars.filter((star) => star.mag <= dataset.magLimit && star.dec >= polarChart.decMin && star.dec <= polarChart.decMax).length.toLocaleString()} HYG stars</span> : null}
         {!dataset ? <span className="meta-pill">{insetStars.length.toLocaleString()} Gaia DR3 sources</span> : null}
         <span className="meta-pill">Editable SVG labels</span>
       </div>

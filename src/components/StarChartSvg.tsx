@@ -1,8 +1,10 @@
 import {
   MAIN_STAR_CHART_ID,
+  getPolarStarChart,
   normalizeStarChartId,
   renderInsetStarChartSvg,
   renderMainStarChartSvg,
+  renderPolarStarChartSvg,
 } from '@/src/chart/render-svg.mjs';
 import type { GaiaInsetStarRecord } from '@/src/data/load-gaia-inset-stars';
 import type { StarDataset } from '@/src/data/load-stars';
@@ -19,10 +21,15 @@ export function StarChartSvg({ chartId = MAIN_STAR_CHART_ID, dataset, insetStars
   if (normalizedChartId === MAIN_STAR_CHART_ID && !dataset) {
     throw new Error('Main star chart rendering requires a HYG star dataset.');
   }
+  if (getPolarStarChart(normalizedChartId) && !dataset) {
+    throw new Error('Polar star chart rendering requires a HYG star dataset.');
+  }
 
   const { svg } = normalizedChartId === MAIN_STAR_CHART_ID
     ? renderMainStarChartSvg(dataset)
-    : renderInsetStarChartSvg(normalizedChartId, insetStars);
+    : getPolarStarChart(normalizedChartId)
+      ? renderPolarStarChartSvg(normalizedChartId, dataset)
+      : renderInsetStarChartSvg(normalizedChartId, insetStars);
 
   return <div dangerouslySetInnerHTML={{ __html: svg }} />;
 }

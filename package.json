@@ -13,6 +13,8 @@
     "fetch:lyra": "node scripts/fetch-lyra-gaia.mjs",
     "export:svg": "node scripts/export-svg.mjs",
     "export:svg:main": "node scripts/export-svg.mjs --chart main",
+    "export:svg:north": "node scripts/export-svg.mjs --chart north-polar",
+    "export:svg:south": "node scripts/export-svg.mjs --chart south-polar",
     "export:svg:pleiades": "node scripts/export-svg.mjs --chart pleiades",
     "export:svg:scorpio": "node scripts/export-svg.mjs --chart scorpio",
     "export:svg:lyra": "node scripts/export-svg.mjs --chart lyra"

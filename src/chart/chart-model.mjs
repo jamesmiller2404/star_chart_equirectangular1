@@ -223,6 +223,8 @@ export const CONSTELLATION_LINE_WIDTH_PT = 0.75;
 export const CONSTELLATION_LABEL_OPACITY = 0.72;
 export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
+export const BRIGHT_STAR_MAGNITUDE_LIMIT = 4.2;
+export const BRIGHT_STAR_RADIUS_SCALE = 2.1;
 export const DEFAULT_RADIUS_COMPRESSION = 1.2;
 export const RADIUS_TAIL_PORTION = 0.2;
 export const MAGNITUDE_SCALE_TICKS = [-1, 0, 2, 4, 6, DEFAULT_MAG_LIMIT];
@@ -260,6 +262,10 @@ export function starRadiusForMagnitude(magnitude, compression = DEFAULT_RADIUS_C
 
 export function starRadius(star, scale = 1, compression = DEFAULT_RADIUS_COMPRESSION) {
   return starRadiusForMagnitude(star.mag, compression) * scale;
+}
+
+export function renderedStarRadiusScaleForMagnitude(magnitude) {
+  return magnitude <= BRIGHT_STAR_MAGNITUDE_LIMIT ? BRIGHT_STAR_RADIUS_SCALE : 1;
 }
 
 export function labelForStar(star) {
