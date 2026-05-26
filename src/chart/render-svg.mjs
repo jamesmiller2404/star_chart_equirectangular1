@@ -1570,6 +1570,85 @@ function renderPolarConstellationLines(dataset, chart, centerX, centerY, radius)
   return lines.join('\n');
 }
 
+function polarConstellationLineSegments(path, starsByHip, chart, centerX, centerY, radius) {
+  const segments = [];
+
+  for (let index = 1; index < path.hips.length; index += 1) {
+    const start = starsByHip.get(path.hips[index - 1]);
+    const end = starsByHip.get(path.hips[index]);
+    if (!start || !end) continue;
+    if (
+      (start.dec < chart.decMin && end.dec < chart.decMin)
+      || (start.dec > chart.decMax && end.dec > chart.decMax)
+    ) {
+      continue;
+    }
+
+    segments.push([
+      polarPointForCoordinates(start.ra, start.dec, chart, centerX, centerY, radius),
+      polarPointForCoordinates(end.ra, end.dec, chart, centerX, centerY, radius),
+    ]);
+  }
+
+  return segments;
+}
+
+function polarConstellationLabelPosition(constellation, starsByHip, chart, centerX, centerY, radius) {
+  let weightedX = 0;
+  let weightedY = 0;
+  let totalWeight = 0;
+
+  for (const path of constellation.paths) {
+    for (const [start, end] of polarConstellationLineSegments(path, starsByHip, chart, centerX, centerY, radius)) {
+      const length = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+      weightedX += ((start.x + end.x) / 2) * length;
+      weightedY += ((start.y + end.y) / 2) * length;
+      totalWeight += length;
+    }
+  }
+
+  if (totalWeight > 0) {
+    return {
+      x: weightedX / totalWeight,
+      y: weightedY / totalWeight,
+    };
+  }
+
+  const points = constellation.paths
+    .flatMap((path) => path.hips)
+    .map((hip) => starsByHip.get(hip))
+    .filter((star) => star && isStarInsidePolarChart(star, chart))
+    .map((star) => polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius));
+
+  if (!points.length) return null;
+
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function renderPolarConstellationLabels(dataset, chart, centerX, centerY, radius) {
+  if (!dataset.constellations?.lines?.length) return '';
+
+  const starsByHip = createHipStarMap(dataset.stars);
+  const lines = [
+    `  <g id="constellation-abbreviation-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${CONSTELLATION_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="8pt" font-weight="700" letter-spacing="0.6" text-anchor="middle" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+  ];
+
+  for (const constellation of dataset.constellations.lines) {
+    const point = polarConstellationLabelPosition(constellation, starsByHip, chart, centerX, centerY, radius);
+    if (!point) continue;
+
+    lines.push(
+      `    <text id="constellation-label-${escapeXml(constellation.iau)}" x="${number(point.x)}" y="${number(point.y)}" data-name="${escapeXml(constellation.name)}">${escapeXml(constellation.iau)}</text>`,
+    );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
 function renderPolarGrid(chart, centerX, centerY, radius) {
   const lines = [
     `  <g id="polar-grid" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
@@ -1672,6 +1751,8 @@ function renderPolarStarChartLayer(dataset, chart) {
   const stars = dataset.stars.filter((star) => isStarInsidePolarChart(star, chart));
   const nameLabels = stars.filter((star) => star.proper);
   const bayerLabels = stars.filter(shouldLabelBayerStar);
+  const constellationLabels = renderPolarConstellationLabels(dataset, chart, centerX, centerY, radius);
+  const constellationLabelCount = constellationLabels.match(/<text id="constellation-label-/g)?.length ?? 0;
   const decSummary = `${chart.decMin > 0 ? '+' : ''}${chart.decMin}° to ${chart.decMax > 0 ? '+' : ''}${chart.decMax}°`;
 
   return {
@@ -1685,6 +1766,7 @@ function renderPolarStarChartLayer(dataset, chart) {
       renderPolarEcliptic(chart, centerX, centerY, radius),
       renderPolarConstellationLines(dataset, chart, centerX, centerY, radius),
       renderPolarStars(chart, stars, centerX, centerY, radius),
+      constellationLabels,
       renderPolarStarNameLabels(chart, nameLabels, centerX, centerY, radius),
       renderPolarBayerDesignationLabels(chart, bayerLabels, centerX, centerY, radius),
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
@@ -1696,7 +1778,7 @@ function renderPolarStarChartLayer(dataset, chart) {
       '  </g>',
     ].join('\n'),
     starCount: stars.length,
-    labelCount: nameLabels.length + bayerLabels.length,
+    labelCount: nameLabels.length + bayerLabels.length + constellationLabelCount,
   };
 }
 
