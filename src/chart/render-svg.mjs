@@ -1422,6 +1422,9 @@ const POLAR_CLEAN_INNER_DECLINATION = 85;
 const POLAR_OUTER_FRAME_RADIUS_SCALE = 1.02;
 const POLAR_OUTER_FRAME_OPACITY = 0.65;
 const POLAR_OUTER_FRAME_WIDTH_PT = 1.2;
+const POLAR_RA_FRAME_TICK_STEP_MINUTES = 5;
+const POLAR_RA_FRAME_MAJOR_TICK_MINUTES = new Set([20, 40]);
+const POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO = 0.5;
 
 function polarChartSize() {
   return {
@@ -1449,6 +1452,14 @@ function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
   return {
     x: centerX + Math.sin(angle) * r,
     y: centerY - Math.cos(angle) * r,
+  };
+}
+
+function polarPointForRaRadius(ra, radius, centerX, centerY) {
+  const angle = (ra / 24) * Math.PI * 2;
+  return {
+    x: centerX + Math.sin(angle) * radius,
+    y: centerY - Math.cos(angle) * radius,
   };
 }
 
@@ -1663,6 +1674,7 @@ function renderPolarConstellationLabels(dataset, chart, centerX, centerY, radius
 
 function renderPolarGrid(chart, centerX, centerY, radius) {
   const innerRadius = polarCleanInnerRadius(chart, radius);
+  const outerRadius = radius * POLAR_OUTER_FRAME_RADIUS_SCALE;
   const lines = [
     `  <g id="polar-grid" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
   ];
@@ -1676,7 +1688,7 @@ function renderPolarGrid(chart, centerX, centerY, radius) {
   for (const hour of createRaTicks(1)) {
     if (hour === 24) continue;
     const inner = polarPointForCoordinates(hour, polarCleanInnerDec(chart), chart, centerX, centerY, radius);
-    const edge = polarPointForCoordinates(hour, chart.poleDec > 0 ? chart.decMin : chart.decMax, chart, centerX, centerY, radius);
+    const edge = polarPointForRaRadius(hour, outerRadius, centerX, centerY);
     lines.push(`    <line x1="${number(inner.x)}" y1="${number(inner.y)}" x2="${number(edge.x)}" y2="${number(edge.y)}" />`);
   }
 
@@ -1702,6 +1714,28 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   }
 
   lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarRaFrameTicks(centerX, centerY, radius) {
+  const outerRadius = radius * POLAR_OUTER_FRAME_RADIUS_SCALE;
+  const frameBandWidth = outerRadius - radius;
+  const lines = [
+    `    <g id="polar-ra-frame-ticks" fill="none" stroke="${PRINT_CHART.frame}" stroke-opacity="${POLAR_OUTER_FRAME_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
+  ];
+
+  for (const tick of createRaMinuteTicks(POLAR_RA_FRAME_TICK_STEP_MINUTES)) {
+    if (tick.hour >= 24) continue;
+    const minuteWithinHour = tick.minute % 60;
+    if (minuteWithinHour === 0) continue;
+    const isMajorTick = POLAR_RA_FRAME_MAJOR_TICK_MINUTES.has(minuteWithinHour);
+    const tickInnerRadius = isMajorTick ? radius : outerRadius - frameBandWidth * POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO;
+    const inner = polarPointForRaRadius(tick.hour, tickInnerRadius, centerX, centerY);
+    const outer = polarPointForRaRadius(tick.hour, outerRadius, centerX, centerY);
+    lines.push(`      <line x1="${number(inner.x)}" y1="${number(inner.y)}" x2="${number(outer.x)}" y2="${number(outer.y)}" />`);
+  }
+
+  lines.push('    </g>');
   return lines.join('\n');
 }
 
@@ -1796,6 +1830,7 @@ function renderPolarStarChartLayer(dataset, chart) {
       constellationLabels,
       renderPolarStarNameLabels(chart, nameLabels, centerX, centerY, radius),
       renderPolarBayerDesignationLabels(chart, bayerLabels, centerX, centerY, radius),
+      renderPolarRaFrameTicks(centerX, centerY, radius),
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-opacity="${POLAR_OUTER_FRAME_OPACITY}" stroke-width="${POLAR_OUTER_FRAME_WIDTH_PT}pt">`,
       `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius * POLAR_OUTER_FRAME_RADIUS_SCALE)}" />`,
       '    </g>',
