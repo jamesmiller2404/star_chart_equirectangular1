@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { CONSTELLATION_BOUNDARIES } from './constellation-boundaries-data.mjs';
 import {
   BRIGHT_STAR_MAGNITUDE_LIMIT,
   colorForStar,
@@ -8,12 +9,8 @@ import {
   CONSTELLATION_LINE_WIDTH_PT,
   CONSTELLATION_LABEL_OPACITY,
   constellationBoundaryPaths,
-  constellationLabelPosition,
-  constellationLineSegments,
   createEclipticCoordinates,
   createHipStarMap,
-  createDecTickMarks,
-  createDecTicks,
   createRaMinuteTicks,
   createRaTicks,
   DEFAULT_CHART,
@@ -27,7 +24,6 @@ import {
   MAGNITUDE_SCALE_TICKS,
   MIN_STAR_RADIUS,
   pointForCoordinates,
-  pointForStar,
   PRINT_CHART,
   renderedStarRadiusScaleForMagnitude,
   shouldLabelBayerStar,
@@ -172,6 +168,27 @@ const SCORPIO_INSET = {
 };
 
 export const MAIN_STAR_CHART_ID = 'main';
+export const MAIN_DEC_55_STAR_CHART_ID = 'main-dec-55';
+
+export const MAIN_STAR_CHARTS = {
+  [MAIN_STAR_CHART_ID]: {
+    id: MAIN_STAR_CHART_ID,
+    aliases: ['all-sky'],
+    title: 'HYG Star Chart',
+    outputFileName: 'hyg-star-chart-main-24x12.svg',
+    decMin: -90,
+    decMax: 90,
+  },
+  [MAIN_DEC_55_STAR_CHART_ID]: {
+    id: MAIN_DEC_55_STAR_CHART_ID,
+    aliases: ['main-55', 'main-limited', 'dec-55', 'dec55'],
+    title: 'HYG Star Chart -55 to +55 Dec',
+    outputFileName: 'hyg-star-chart-main-dec-55-24x12.svg',
+    decMin: -55,
+    decMax: 55,
+    preserveFullSkyScale: true,
+  },
+};
 
 export const POLAR_STAR_CHARTS = {
   'north-polar': {
@@ -230,13 +247,17 @@ export const INSET_STAR_CHARTS = {
 
 export const STAR_CHART_IDS = [
   MAIN_STAR_CHART_ID,
+  MAIN_DEC_55_STAR_CHART_ID,
   ...Object.keys(POLAR_STAR_CHARTS),
   ...Object.keys(INSET_STAR_CHARTS),
 ];
 
 export function normalizeStarChartId(chartId) {
   const normalized = String(chartId ?? MAIN_STAR_CHART_ID).trim().toLowerCase();
-  if (normalized === MAIN_STAR_CHART_ID) return MAIN_STAR_CHART_ID;
+
+  for (const chart of Object.values(MAIN_STAR_CHARTS)) {
+    if (normalized === chart.id || chart.aliases.includes(normalized)) return chart.id;
+  }
 
   for (const chart of Object.values(POLAR_STAR_CHARTS)) {
     if (normalized === chart.id || chart.aliases.includes(normalized)) return chart.id;
@@ -247,6 +268,11 @@ export function normalizeStarChartId(chartId) {
   }
 
   return null;
+}
+
+export function getMainStarChart(chartId) {
+  const normalized = normalizeStarChartId(chartId);
+  return normalized ? MAIN_STAR_CHARTS[normalized] ?? null : null;
 }
 
 export function getInsetStarChart(chartId) {
@@ -268,9 +294,58 @@ function raHoursForCelestialLongitude(longitudeDegrees) {
   return normalizedLongitude / 15;
 }
 
-function pointForCelestialCoordinate(coordinate, width, height, padding) {
+function pointForCelestialCoordinate(coordinate, width, height, padding, projection = null) {
   const [longitude, latitude] = coordinate;
+  if (projection) return projection.project(raHoursForCelestialLongitude(longitude), latitude);
   return pointForCoordinates(raHoursForCelestialLongitude(longitude), latitude, width, height, padding);
+}
+
+function createMainChartProjection(width, height, padding, chart = MAIN_STAR_CHARTS[MAIN_STAR_CHART_ID]) {
+  const decMin = chart.decMin ?? -90;
+  const decMax = chart.decMax ?? 90;
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const preservesFullSkyScale = chart.preserveFullSkyScale ?? (decMin !== -90 || decMax !== 90);
+  const sourceDecMin = preservesFullSkyScale ? -90 : decMin;
+  const sourceDecMax = preservesFullSkyScale ? 90 : decMax;
+  const sourceDecSpan = sourceDecMax - sourceDecMin;
+  const croppedPlotHeight = ((decMax - decMin) / sourceDecSpan) * plotHeight;
+  const yOffset = preservesFullSkyScale ? (plotHeight - croppedPlotHeight) / 2 : 0;
+
+  return {
+    decMin,
+    decMax,
+    plotTop: padding + yOffset,
+    plotBottom: padding + yOffset + croppedPlotHeight,
+    plotHeight: croppedPlotHeight,
+    isFullSky: decMin === -90 && decMax === 90,
+    project(ra, dec) {
+      return {
+        x: padding + ((24 - ra) / 24) * plotWidth,
+        y: padding + yOffset + ((decMax - dec) / (decMax - decMin)) * croppedPlotHeight,
+      };
+    },
+    containsDec(dec) {
+      return dec >= decMin && dec <= decMax;
+    },
+  };
+}
+
+function mainPointForStar(star, projection) {
+  return projection.project(star.ra, star.dec);
+}
+
+function mainDecTicks(step, projection) {
+  const ticks = [];
+  for (let dec = ceilToStep(projection.decMin, step); dec <= projection.decMax + 1e-9; dec += step) {
+    ticks.push(dec);
+  }
+  return ticks;
+}
+
+function mainDecLabelTicks(step, projection) {
+  return [...new Set([projection.decMin, ...mainDecTicks(step, projection), projection.decMax])]
+    .sort((a, b) => a - b);
 }
 
 function unwrapHorizontalPoints(points, plotWidth) {
@@ -355,10 +430,10 @@ function pathIntersectsPlotArea(points, padding, plotWidth, plotHeight) {
   return maxX >= padding && minX <= maxPlotX && maxY >= padding && minY <= maxPlotY;
 }
 
-function projectedMilkyWayRing(ring, width, height, padding) {
+function projectedMilkyWayRing(ring, width, height, padding, projection = null) {
   const plotWidth = width - padding * 2;
   return unwrapClosedHorizontalRing(
-    ring.map((coordinate) => pointForCelestialCoordinate(coordinate, width, height, padding)),
+    ring.map((coordinate) => pointForCelestialCoordinate(coordinate, width, height, padding, projection)),
     plotWidth,
   );
 }
@@ -431,7 +506,7 @@ function pathForRings(rings, minX, maxX, minY, maxY) {
   return rings.map((ring) => pathAttributeWithEdgeClosure(ring, minX, maxX, minY, maxY)).join(' ');
 }
 
-function createMilkyWayFeaturePaths(feature, width, height, padding) {
+function createMilkyWayFeaturePaths(feature, width, height, padding, projection = null) {
   const plotWidth = width - padding * 2;
   const plotHeight = height - padding * 2;
   const minX = padding;
@@ -444,7 +519,7 @@ function createMilkyWayFeaturePaths(feature, width, height, padding) {
 
   for (const polygon of feature.geometry.coordinates) {
     const rings = alignRingsToOuterRing(
-      polygon.map((ring) => projectedMilkyWayRing(ring, width, height, padding)),
+      polygon.map((ring) => projectedMilkyWayRing(ring, width, height, padding, projection)),
       plotWidth,
     );
     for (const shiftX of [-plotWidth, 0, plotWidth]) {
@@ -458,17 +533,17 @@ function createMilkyWayFeaturePaths(feature, width, height, padding) {
   return paths;
 }
 
-function renderPlotClipPath(width, height, padding) {
+function renderPlotClipPath(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   return [
     '  <defs>',
     `    <clipPath id="${MAIN_CHART_PLOT_CLIP_ID}">`,
-    `      <rect x="${padding}" y="${padding}" width="${width - padding * 2}" height="${height - padding * 2}" />`,
+    `      <rect x="${padding}" y="${number(projection.plotTop)}" width="${width - padding * 2}" height="${number(projection.plotHeight)}" />`,
     '    </clipPath>',
     '  </defs>',
   ].join('\n');
 }
 
-function renderMilkyWayLayer(width, height, padding) {
+function renderMilkyWayLayer(width, height, padding, projection = null) {
   const lines = [
     `  <g id="milky-way-layer" data-layer="Milky Way outline" opacity="${MILKY_WAY_LAYER_OPACITY}" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
     '    <desc>Faint filled Milky Way outlines from d3-celestial data/mw.json; paths are fills only for Illustrator layer editing.</desc>',
@@ -478,7 +553,7 @@ function renderMilkyWayLayer(width, height, padding) {
     const layerId = escapeXml(feature.id ?? `ol${featureIndex + 1}`);
     const opacity = MILKY_WAY_FEATURE_OPACITIES[featureIndex] ?? 0.02;
     const fill = featureIndex >= D3_CELESTIAL_MILKY_WAY.features.length - 2 ? PRINT_CHART.text : PRINT_CHART.mutedText;
-    const paths = createMilkyWayFeaturePaths(feature, width, height, padding);
+    const paths = createMilkyWayFeaturePaths(feature, width, height, padding, projection);
 
     lines.push(`    <g id="milky-way-${layerId}" data-brightness-step="${layerId}" fill="${fill}" fill-opacity="${opacity}" fill-rule="evenodd">`);
     for (const path of paths) {
@@ -491,7 +566,7 @@ function renderMilkyWayLayer(width, height, padding) {
   return lines.join('\n');
 }
 
-function renderGrid(width, height, padding) {
+function renderGrid(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   const lines = [
     `  <g id="grid" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
   ];
@@ -501,25 +576,25 @@ function renderGrid(width, height, padding) {
     const x = padding + ((24 - tick.hour) / 24) * (width - padding * 2);
     const tickLength = tick.isMedium ? 18 : 9;
     const opacity = tick.isMedium ? GRID_OPACITY : 0.3;
-    lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${padding + tickLength}" stroke-opacity="${opacity}" />`);
-    lines.push(`    <line x1="${number(x)}" y1="${height - padding}" x2="${number(x)}" y2="${height - padding - tickLength}" stroke-opacity="${opacity}" />`);
+    lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotTop)}" x2="${number(x)}" y2="${number(projection.plotTop + tickLength)}" stroke-opacity="${opacity}" />`);
+    lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotBottom)}" x2="${number(x)}" y2="${number(projection.plotBottom - tickLength)}" stroke-opacity="${opacity}" />`);
   }
 
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
-    lines.push(`    <line x1="${number(x)}" y1="${padding}" x2="${number(x)}" y2="${height - padding}" stroke-opacity="${GRID_OPACITY}" />`);
+    lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotTop)}" x2="${number(x)}" y2="${number(projection.plotBottom)}" stroke-opacity="${GRID_OPACITY}" />`);
   }
 
-  for (const tick of createDecTickMarks(5)) {
+  for (const tick of mainDecTicks(5, projection).map((dec) => ({ dec, isMajor: dec % 10 === 0 }))) {
     if (tick.isMajor) continue;
-    const y = padding + ((90 - tick.dec) / 180) * (height - padding * 2);
+    const y = projection.project(0, tick.dec).y;
     const tickLength = 9;
     lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${padding + tickLength}" y2="${number(y)}" stroke-opacity="0.3" />`);
     lines.push(`    <line x1="${width - padding}" y1="${number(y)}" x2="${width - padding - tickLength}" y2="${number(y)}" stroke-opacity="0.3" />`);
   }
 
-  for (const dec of createDecTicks(10)) {
-    const y = padding + ((90 - dec) / 180) * (height - padding * 2);
+  for (const dec of mainDecLabelTicks(10, projection)) {
+    const y = projection.project(0, dec).y;
     lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${width - padding}" y2="${number(y)}" stroke-opacity="${GRID_OPACITY}" />`);
   }
 
@@ -527,19 +602,19 @@ function renderGrid(width, height, padding) {
   return lines.join('\n');
 }
 
-function renderGridLabels(width, height, padding) {
+function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   const lines = [
     `  <g id="ra-dec-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
   ];
 
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
-    lines.push(`    <text x="${number(x)}" y="${padding - 20}" text-anchor="middle">${hour}h</text>`);
-    lines.push(`    <text x="${number(x)}" y="${height - padding + 30}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(x)}" y="${number(projection.plotTop - 20)}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(x)}" y="${number(projection.plotBottom + 30)}" text-anchor="middle">${hour}h</text>`);
   }
 
-  for (const dec of createDecTicks(10)) {
-    const y = padding + ((90 - dec) / 180) * (height - padding * 2);
+  for (const dec of mainDecLabelTicks(10, projection)) {
+    const y = projection.project(0, dec).y;
     lines.push(`    <text x="${padding - 12}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
     lines.push(`    <text x="${width - padding + 12}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
   }
@@ -548,11 +623,11 @@ function renderGridLabels(width, height, padding) {
   return lines.join('\n');
 }
 
-function renderCoordinateReferenceLines(width, height, padding) {
+function renderCoordinateReferenceLines(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   const eclipticPoints = createEclipticCoordinates().map((coordinate) => (
-    pointForCoordinates(coordinate.ra, coordinate.dec, width, height, padding)
+    projection.project(coordinate.ra, coordinate.dec)
   ));
-  const vernalEquinox = pointForCoordinates(0, 0, width, height, padding);
+  const vernalEquinox = projection.project(0, 0);
 
   return [
     `  <g id="coordinate-reference-lines" fill="none" stroke-linecap="round" stroke-linejoin="round">`,
@@ -562,12 +637,12 @@ function renderCoordinateReferenceLines(width, height, padding) {
   ].join('\n');
 }
 
-function renderStars(id, stars, scale, opacity = 1) {
+function renderStars(id, stars, scale, opacity = 1, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
   const lines = [`  <g id="${id}"${opacityAttribute}>`];
 
   for (const star of stars) {
-    const point = pointForStar(star);
+    const point = mainPointForStar(star, projection);
     const radius = starRadius(star, scale) * SVG_RADIUS_SCALE;
     const strokeWidth = Math.max(0.08, Math.min(0.18, radius * 0.14));
     lines.push(
@@ -579,7 +654,50 @@ function renderStars(id, stars, scale, opacity = 1) {
   return lines.join('\n');
 }
 
-function renderConstellationLines(dataset) {
+function mainSegmentPiecesForStars(start, end, projection) {
+  const deltaRa = Math.abs(start.ra - end.ra);
+  const startPoint = mainPointForStar(start, projection);
+  const endPoint = mainPointForStar(end, projection);
+
+  if (deltaRa <= 12) return [[startPoint, endPoint]];
+
+  const interpolateDeclinationAtRa = (sourceStart, sourceEnd, targetRa) => {
+    const t = (targetRa - sourceStart.ra) / (sourceEnd.ra - sourceStart.ra);
+    return sourceStart.dec + (sourceEnd.dec - sourceStart.dec) * t;
+  };
+
+  if (start.ra < end.ra) {
+    const wrappedEnd = { ...end, ra: end.ra - 24 };
+    const seamDec = interpolateDeclinationAtRa(start, wrappedEnd, 0);
+    return [
+      [startPoint, projection.project(0, seamDec)],
+      [projection.project(24, seamDec), endPoint],
+    ];
+  }
+
+  const wrappedEnd = { ...end, ra: end.ra + 24 };
+  const seamDec = interpolateDeclinationAtRa(start, wrappedEnd, 24);
+  return [
+    [startPoint, projection.project(24, seamDec)],
+    [projection.project(0, seamDec), endPoint],
+  ];
+}
+
+function mainConstellationLineSegments(path, starsByHip, projection) {
+  const segments = [];
+
+  for (let index = 1; index < path.hips.length; index += 1) {
+    const start = starsByHip.get(path.hips[index - 1]);
+    const end = starsByHip.get(path.hips[index]);
+    if (!start || !end) continue;
+
+    segments.push(...mainSegmentPiecesForStars(start, end, projection));
+  }
+
+  return segments;
+}
+
+function renderConstellationLines(dataset, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   if (!dataset.constellations?.lines?.length) return '';
 
   const starsByHip = createHipStarMap(dataset.stars);
@@ -591,7 +709,7 @@ function renderConstellationLines(dataset) {
     lines.push(`    <g id="constellation-${escapeXml(constellation.iau)}" data-name="${escapeXml(constellation.name)}">`);
 
     for (const path of constellation.paths) {
-      for (const [start, end] of constellationLineSegments(path, starsByHip)) {
+      for (const [start, end] of mainConstellationLineSegments(path, starsByHip, projection)) {
         lines.push(
           `      <line x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
         );
@@ -605,12 +723,30 @@ function renderConstellationLines(dataset) {
   return lines.join('\n');
 }
 
-function renderConstellationBoundaries() {
+function sourceBoundaryPointToMainPoint(point, projection) {
+  const bounds = CONSTELLATION_BOUNDARIES.plotBounds;
+  const sourcePlotWidth = bounds.maxX - bounds.minX;
+  const sourcePlotHeight = bounds.maxY - bounds.minY;
+  const ra = ((bounds.maxX - point[0]) / sourcePlotWidth) * 24;
+  const dec = 90 - ((point[1] - bounds.minY) / sourcePlotHeight) * 180;
+  return projection.project(ra, dec);
+}
+
+function mainConstellationBoundaryPaths(projection) {
+  if (projection.isFullSky) return constellationBoundaryPaths();
+
+  return CONSTELLATION_BOUNDARIES.boundaries.map((boundary) => ({
+    iau: boundary.iau,
+    paths: boundary.paths.map((path) => path.map((point) => sourceBoundaryPointToMainPoint(point, projection))),
+  }));
+}
+
+function renderConstellationBoundaries(projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
     `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="#75d5a9" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${CONSTELLATION_BOUNDARY_WIDTH_PT}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
   ];
 
-  for (const boundary of constellationBoundaryPaths()) {
+  for (const boundary of mainConstellationBoundaryPaths(projection)) {
     lines.push(`    <g id="constellation-boundary-${escapeXml(boundary.iau)}">`);
 
     for (const path of boundary.paths) {
@@ -625,7 +761,42 @@ function renderConstellationBoundaries() {
   return lines.join('\n');
 }
 
-function renderConstellationLabels(dataset) {
+function mainConstellationLabelPosition(constellation, starsByHip, projection) {
+  let weightedX = 0;
+  let weightedY = 0;
+  let totalWeight = 0;
+
+  for (const path of constellation.paths) {
+    for (const [start, end] of mainConstellationLineSegments(path, starsByHip, projection)) {
+      const length = Math.hypot(end.x - start.x, end.y - start.y) || 1;
+      weightedX += ((start.x + end.x) / 2) * length;
+      weightedY += ((start.y + end.y) / 2) * length;
+      totalWeight += length;
+    }
+  }
+
+  if (totalWeight > 0) {
+    return {
+      x: weightedX / totalWeight,
+      y: weightedY / totalWeight,
+    };
+  }
+
+  const points = constellation.paths
+    .flatMap((path) => path.hips)
+    .map((hip) => starsByHip.get(hip))
+    .filter(Boolean)
+    .map((star) => mainPointForStar(star, projection));
+
+  if (!points.length) return null;
+
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length,
+  };
+}
+
+function renderConstellationLabels(dataset, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   if (!dataset.constellations?.lines?.length) return '';
 
   const starsByHip = createHipStarMap(dataset.stars);
@@ -634,7 +805,7 @@ function renderConstellationLabels(dataset) {
   ];
 
   for (const constellation of dataset.constellations.lines) {
-    const point = constellationLabelPosition(constellation, starsByHip);
+    const point = mainConstellationLabelPosition(constellation, starsByHip, projection);
     if (!point) continue;
 
     lines.push(
@@ -646,13 +817,13 @@ function renderConstellationLabels(dataset) {
   return lines.join('\n');
 }
 
-function renderStarNameLabels(stars) {
+function renderStarNameLabels(stars, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
     `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
   ];
 
   for (const star of stars) {
-    const point = pointForStar(star);
+    const point = mainPointForStar(star, projection);
     lines.push(
       `    <text id="star-name-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y - 7)}">${escapeXml(labelForStar(star))}</text>`,
     );
@@ -662,13 +833,13 @@ function renderStarNameLabels(stars) {
   return lines.join('\n');
 }
 
-function renderBayerDesignationLabels(stars) {
+function renderBayerDesignationLabels(stars, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
     `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="7pt" font-style="italic">`,
   ];
 
   for (const star of stars) {
-    const point = pointForStar(star);
+    const point = mainPointForStar(star, projection);
     const yOffset = star.proper ? 9 : -7;
     lines.push(
       `    <text id="bayer-designation-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y + yOffset)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`,
@@ -1361,6 +1532,44 @@ function renderPolarEcliptic(chart, centerX, centerY, radius) {
   return lines.join('\n');
 }
 
+function renderPolarConstellationLines(dataset, chart, centerX, centerY, radius) {
+  if (!dataset.constellations?.lines?.length) return '';
+
+  const starsByHip = createHipStarMap(dataset.stars);
+  const lines = [
+    `  <g id="constellation-lines" fill="none" stroke="${PRINT_CHART.constellationLine}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+  ];
+
+  for (const constellation of dataset.constellations.lines) {
+    lines.push(`    <g id="constellation-${escapeXml(constellation.iau)}" data-name="${escapeXml(constellation.name)}">`);
+
+    for (const path of constellation.paths) {
+      for (let index = 1; index < path.hips.length; index += 1) {
+        const start = starsByHip.get(path.hips[index - 1]);
+        const end = starsByHip.get(path.hips[index]);
+        if (!start || !end) continue;
+        if (
+          (start.dec < chart.decMin && end.dec < chart.decMin)
+          || (start.dec > chart.decMax && end.dec > chart.decMax)
+        ) {
+          continue;
+        }
+
+        const startPoint = polarPointForCoordinates(start.ra, start.dec, chart, centerX, centerY, radius);
+        const endPoint = polarPointForCoordinates(end.ra, end.dec, chart, centerX, centerY, radius);
+        lines.push(
+          `      <line x1="${number(startPoint.x)}" y1="${number(startPoint.y)}" x2="${number(endPoint.x)}" y2="${number(endPoint.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
+        );
+      }
+    }
+
+    lines.push('    </g>');
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
 function renderPolarGrid(chart, centerX, centerY, radius) {
   const lines = [
     `  <g id="polar-grid" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
@@ -1424,15 +1633,31 @@ function renderPolarStars(chart, stars, centerX, centerY, radius) {
   ].join('\n');
 }
 
-function renderPolarStarLabels(chart, stars, centerX, centerY, radius) {
-  const labelStars = stars.filter(shouldLabelStar);
+function renderPolarStarNameLabels(chart, stars, centerX, centerY, radius) {
+  const labelStars = stars.filter((star) => star.proper);
   const lines = [
-    `  <g id="star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
+    `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
   ];
 
   for (const star of labelStars) {
     const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
-    lines.push(`    <text id="star-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y - 6)}">${escapeXml(labelForStar(star))}</text>`);
+    lines.push(`    <text id="star-name-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y - 6)}">${escapeXml(labelForStar(star))}</text>`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarBayerDesignationLabels(chart, stars, centerX, centerY, radius) {
+  const labelStars = stars.filter(shouldLabelBayerStar);
+  const lines = [
+    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="7pt" font-style="italic">`,
+  ];
+
+  for (const star of labelStars) {
+    const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
+    const yOffset = star.proper ? 9 : -6;
+    lines.push(`    <text id="bayer-designation-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y + yOffset)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`);
   }
 
   lines.push('  </g>');
@@ -1445,6 +1670,8 @@ function renderPolarStarChartLayer(dataset, chart) {
   const centerY = height / 2;
   const radius = Math.min(width, height) / 2 - POLAR_CHART.padding;
   const stars = dataset.stars.filter((star) => isStarInsidePolarChart(star, chart));
+  const nameLabels = stars.filter((star) => star.proper);
+  const bayerLabels = stars.filter(shouldLabelBayerStar);
   const decSummary = `${chart.decMin > 0 ? '+' : ''}${chart.decMin}° to ${chart.decMax > 0 ? '+' : ''}${chart.decMax}°`;
 
   return {
@@ -1456,8 +1683,10 @@ function renderPolarStarChartLayer(dataset, chart) {
       renderPolarGrid(chart, centerX, centerY, radius),
       renderPolarGridLabels(chart, centerX, centerY, radius),
       renderPolarEcliptic(chart, centerX, centerY, radius),
+      renderPolarConstellationLines(dataset, chart, centerX, centerY, radius),
       renderPolarStars(chart, stars, centerX, centerY, radius),
-      renderPolarStarLabels(chart, stars, centerX, centerY, radius),
+      renderPolarStarNameLabels(chart, nameLabels, centerX, centerY, radius),
+      renderPolarBayerDesignationLabels(chart, bayerLabels, centerX, centerY, radius),
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
       `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius)}" />`,
       '    </g>',
@@ -1467,42 +1696,45 @@ function renderPolarStarChartLayer(dataset, chart) {
       '  </g>',
     ].join('\n'),
     starCount: stars.length,
-    labelCount: stars.filter(shouldLabelStar).length,
+    labelCount: nameLabels.length + bayerLabels.length,
   };
 }
 
-function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
+function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAIN_STAR_CHARTS[MAIN_STAR_CHART_ID] } = {}) {
   const width = DEFAULT_CHART.width;
   const height = DEFAULT_CHART.height;
   const padding = DEFAULT_CHART.padding;
-  const brightStars = dataset.stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
-  const dimStars = dataset.stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
-  const labels = dataset.stars.filter(shouldLabelStar);
+  const projection = createMainChartProjection(width, height, padding, chart);
+  const stars = dataset.stars.filter((star) => projection.containsDec(star.dec));
+  const brightStars = stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
+  const dimStars = stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
+  const labels = stars.filter(shouldLabelStar);
   const nameLabels = labels.filter((star) => star.proper);
-  const bayerLabels = dataset.stars.filter(shouldLabelBayerStar);
+  const bayerLabels = stars.filter(shouldLabelBayerStar);
+  const decSummary = `${chart.decMin > 0 ? '+' : ''}${chart.decMin}Â° to ${chart.decMax > 0 ? '+' : ''}${chart.decMax}Â°`;
   const transform = chartX || chartY ? ` transform="translate(${chartX} ${chartY})"` : '';
   const parts = [
     `  <g id="equirectangular-star-chart" transform="translate(${chartX} ${chartY})">`,
     '  <g id="chart-background">',
     `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
     '  </g>',
-    renderPlotClipPath(width, height, padding),
-    renderMilkyWayLayer(width, height, padding),
-    renderGrid(width, height, padding),
-    renderGridLabels(width, height, padding),
-    renderCoordinateReferenceLines(width, height, padding),
-    renderConstellationBoundaries(),
-    renderConstellationLines(dataset),
-    renderConstellationLabels(dataset),
-    renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
-    renderStars('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT)),
-    renderStarNameLabels(nameLabels),
-    renderBayerDesignationLabels(bayerLabels),
+    renderPlotClipPath(width, height, padding, projection),
+    renderMilkyWayLayer(width, height, padding, projection),
+    renderGrid(width, height, padding, projection),
+    renderGridLabels(width, height, padding, projection),
+    renderCoordinateReferenceLines(width, height, padding, projection),
+    renderConstellationBoundaries(projection),
+    renderConstellationLines({ ...dataset, stars }, projection),
+    renderConstellationLabels({ ...dataset, stars }, projection),
+    renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY, projection),
+    renderStars('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT), 1, projection),
+    renderStarNameLabels(nameLabels, projection),
+    renderBayerDesignationLabels(bayerLabels, projection),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
-    `    <rect x="${padding}" y="${padding}" width="${width - padding * 2}" height="${height - padding * 2}" />`,
+    `    <rect x="${padding}" y="${number(projection.plotTop)}" width="${width - padding * 2}" height="${number(projection.plotHeight)}" />`,
     '  </g>',
     `  <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
-    `    <text x="${padding}" y="${height - 24}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / ${dataset.count.toLocaleString()} stars</text>`,
+    `    <text x="${padding}" y="${height - 24}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / declination ${escapeXml(decSummary)} / ${stars.length.toLocaleString()} stars</text>`,
     '  </g>',
     renderMagnitudeScale(width, height, padding),
     '  </g>',
@@ -1513,23 +1745,26 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
   return {
     svg: parts.join('\n'),
     labelCount: nameLabels.length + bayerLabels.length,
+    starCount: stars.length,
   };
 }
 
 export function renderMainStarChartSvg(dataset, options = {}) {
-  const { svg, labelCount } = renderMainStarChartLayer(dataset);
+  const chart = options.chart ?? MAIN_STAR_CHARTS[MAIN_STAR_CHART_ID];
+  const { svg, labelCount, starCount } = renderMainStarChartLayer(dataset, { chart });
 
   return {
     svg: renderSvgDocument({
       widthIn: PRINT_CHART.chartWidthIn,
       heightIn: PRINT_CHART.chartHeightIn,
-      title: 'HYG Star Chart',
-      ariaLabel: 'HYG v4.2 all-sky star chart',
-      desc: `HYG v4.2 equirectangular all-sky star chart, magnitude <= ${dataset.magLimit}, generated for Illustrator editing.`,
+      title: chart.title,
+      ariaLabel: `${chart.title} using HYG v4.2 stars`,
+      desc: `HYG v4.2 equirectangular star chart, magnitude <= ${dataset.magLimit}, declination ${chart.decMin} to ${chart.decMax}, generated for Illustrator editing.`,
       xmlDeclaration: options.xmlDeclaration,
       parts: [svg],
     }),
     labelCount,
+    starCount,
   };
 }
 

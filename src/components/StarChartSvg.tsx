@@ -1,5 +1,6 @@
 import {
   MAIN_STAR_CHART_ID,
+  getMainStarChart,
   getPolarStarChart,
   normalizeStarChartId,
   renderInsetStarChartSvg,
@@ -18,15 +19,16 @@ type StarChartSvgProps = {
 export function StarChartSvg({ chartId = MAIN_STAR_CHART_ID, dataset, insetStars = [] }: StarChartSvgProps) {
   const normalizedChartId = normalizeStarChartId(chartId);
   if (!normalizedChartId) throw new Error(`Unknown chart "${chartId}".`);
-  if (normalizedChartId === MAIN_STAR_CHART_ID && !dataset) {
+  const mainChart = getMainStarChart(normalizedChartId);
+  if (mainChart && !dataset) {
     throw new Error('Main star chart rendering requires a HYG star dataset.');
   }
   if (getPolarStarChart(normalizedChartId) && !dataset) {
     throw new Error('Polar star chart rendering requires a HYG star dataset.');
   }
 
-  const { svg } = normalizedChartId === MAIN_STAR_CHART_ID
-    ? renderMainStarChartSvg(dataset)
+  const { svg } = mainChart
+    ? renderMainStarChartSvg(dataset, { chart: mainChart })
     : getPolarStarChart(normalizedChartId)
       ? renderPolarStarChartSvg(normalizedChartId, dataset)
       : renderInsetStarChartSvg(normalizedChartId, insetStars);

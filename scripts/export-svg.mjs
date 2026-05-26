@@ -3,9 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   INSET_STAR_CHARTS,
-  MAIN_STAR_CHART_ID,
+  MAIN_STAR_CHARTS,
   POLAR_STAR_CHARTS,
   STAR_CHART_IDS,
+  getMainStarChart,
   getInsetStarChart,
   getPolarStarChart,
   isCoordinateInsideInsetBounds,
@@ -37,7 +38,8 @@ const inputCandidates = [
   path.join(root, 'poc', 'stars-mag-6_5.json'),
 ];
 const defaultOutputPaths = {
-  main: path.join(root, 'exports', 'hyg-star-chart-main-24x12.svg'),
+  main: path.join(root, 'exports', MAIN_STAR_CHARTS.main.outputFileName),
+  'main-dec-55': path.join(root, 'exports', MAIN_STAR_CHARTS['main-dec-55'].outputFileName),
   'north-polar': path.join(root, 'exports', POLAR_STAR_CHARTS['north-polar'].outputFileName),
   'south-polar': path.join(root, 'exports', POLAR_STAR_CHARTS['south-polar'].outputFileName),
   pleiades: path.join(root, 'exports', INSET_STAR_CHARTS.pleiades.outputFileName),
@@ -47,10 +49,11 @@ const defaultOutputPaths = {
 
 function usage() {
   return [
-    'Usage: npm run export:svg -- [--chart main|north-polar|south-polar|pleiades|scorpio|lyra|all] [--output path]',
+    'Usage: npm run export:svg -- [--chart main|main-dec-55|north-polar|south-polar|pleiades|scorpio|lyra|all] [--output path]',
     '',
     'Examples:',
     '  npm run export:svg -- --chart main',
+    '  npm run export:svg -- --chart main-dec-55',
     '  npm run export:svg -- --chart north-polar',
     '  npm run export:svg -- --chart south-polar',
     '  npm run export:svg -- --chart pleiades',
@@ -111,7 +114,7 @@ function selectedChartIds(chartOption) {
 
   const chartId = normalizeStarChartId(normalizedOption);
   if (!chartId) {
-    throw new Error(`Unknown chart "${chartOption}". Use main, north-polar, south-polar, pleiades, scorpio, lyra, or all.`);
+    throw new Error(`Unknown chart "${chartOption}". Use main, main-dec-55, north-polar, south-polar, pleiades, scorpio, lyra, or all.`);
   }
 
   return [chartId];
@@ -222,11 +225,12 @@ for (const chartId of chartIds) {
     ? path.resolve(root, options.outputPath)
     : defaultOutputPaths[chartId];
 
-  if (chartId === MAIN_STAR_CHART_ID) {
+  const mainChart = getMainStarChart(chartId);
+  if (mainChart) {
     const dataset = await readDataset();
-    const { svg, labelCount } = renderMainStarChartSvg(dataset, { xmlDeclaration: true });
+    const { svg, starCount, labelCount } = renderMainStarChartSvg(dataset, { xmlDeclaration: true, chart: mainChart });
     await writeSvg(outputPath, svg);
-    console.log(`Main chart contains ${dataset.count} stars and ${labelCount} editable labels.`);
+    console.log(`${mainChart.title} contains ${starCount} stars and ${labelCount} editable labels.`);
     if (dataset.constellations) {
       console.log(`Main chart contains ${dataset.constellations.count} constellation line groups.`);
     }

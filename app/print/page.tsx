@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { loadStarDataset } from '@/src/data/load-stars';
 import { loadGaiaInsetStars } from '@/src/data/load-gaia-inset-stars';
 import { StarChartSvg } from '@/src/components/StarChartSvg';
-import { INSET_STAR_CHARTS, MAIN_STAR_CHART_ID, POLAR_STAR_CHARTS, getPolarStarChart, normalizeStarChartId } from '@/src/chart/render-svg.mjs';
+import { INSET_STAR_CHARTS, MAIN_STAR_CHART_ID, MAIN_STAR_CHARTS, POLAR_STAR_CHARTS, getMainStarChart, getPolarStarChart, normalizeStarChartId } from '@/src/chart/render-svg.mjs';
 
 type PrintPageProps = {
   searchParams?: Promise<{
@@ -13,12 +13,13 @@ type PrintPageProps = {
 export default async function PrintPage({ searchParams }: PrintPageProps) {
   const params = await searchParams;
   const chartId = normalizeStarChartId(params?.chart) ?? MAIN_STAR_CHART_ID;
-  const isMainChart = chartId === MAIN_STAR_CHART_ID;
+  const mainChart = getMainStarChart(chartId);
+  const isMainChart = Boolean(mainChart);
   const polarChart = getPolarStarChart(chartId);
   const isHygChart = isMainChart || Boolean(polarChart);
   const dataset = isHygChart ? await loadStarDataset() : undefined;
   const insetStars = isHygChart ? [] : await loadGaiaInsetStars(chartId);
-  const chartTitle = isMainChart ? 'Main Star Chart' : polarChart ? polarChart.title : `${INSET_STAR_CHARTS[chartId].title} Inset`;
+  const chartTitle = mainChart ? mainChart.title : polarChart ? polarChart.title : `${INSET_STAR_CHARTS[chartId].title} Inset`;
   const chartSize = isMainChart ? '24in x 12in' : polarChart ? '12in x 12in' : 'standalone inset SVG';
 
   return (
@@ -34,6 +35,9 @@ export default async function PrintPage({ searchParams }: PrintPageProps) {
           <Link href="/">Preview</Link>
           <Link href="/print?chart=main" aria-current={chartId === MAIN_STAR_CHART_ID ? 'page' : undefined}>
             Main
+          </Link>
+          <Link href="/print?chart=main-dec-55" aria-current={chartId === MAIN_STAR_CHARTS['main-dec-55'].id ? 'page' : undefined}>
+            Main -55/+55
           </Link>
           <Link href="/print?chart=north-polar" aria-current={chartId === POLAR_STAR_CHARTS['north-polar'].id ? 'page' : undefined}>
             North Polar
