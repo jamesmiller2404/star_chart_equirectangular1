@@ -1418,6 +1418,10 @@ const POLAR_CHART = {
   heightIn: 12,
   padding: 90,
 };
+const POLAR_CLEAN_INNER_DECLINATION = 85;
+const POLAR_OUTER_FRAME_RADIUS_SCALE = 1.02;
+const POLAR_OUTER_FRAME_OPACITY = 0.65;
+const POLAR_OUTER_FRAME_WIDTH_PT = 1.2;
 
 function polarChartSize() {
   return {
@@ -1429,6 +1433,14 @@ function polarChartSize() {
 function polarRadiusForDec(dec, chart, radius) {
   if (chart.poleDec > 0) return ((chart.decMax - dec) / (chart.decMax - chart.decMin)) * radius;
   return ((dec - chart.decMin) / (chart.decMax - chart.decMin)) * radius;
+}
+
+function polarCleanInnerDec(chart) {
+  return chart.poleDec > 0 ? POLAR_CLEAN_INNER_DECLINATION : -POLAR_CLEAN_INNER_DECLINATION;
+}
+
+function polarCleanInnerRadius(chart, radius) {
+  return polarRadiusForDec(polarCleanInnerDec(chart), chart, radius);
 }
 
 function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
@@ -1650,19 +1662,22 @@ function renderPolarConstellationLabels(dataset, chart, centerX, centerY, radius
 }
 
 function renderPolarGrid(chart, centerX, centerY, radius) {
+  const innerRadius = polarCleanInnerRadius(chart, radius);
   const lines = [
     `  <g id="polar-grid" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
   ];
 
   for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
     const circleRadius = polarRadiusForDec(dec, chart, radius);
+    if (circleRadius < innerRadius - 1e-9) continue;
     lines.push(`    <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(circleRadius)}" />`);
   }
 
   for (const hour of createRaTicks(1)) {
     if (hour === 24) continue;
+    const inner = polarPointForCoordinates(hour, polarCleanInnerDec(chart), chart, centerX, centerY, radius);
     const edge = polarPointForCoordinates(hour, chart.poleDec > 0 ? chart.decMin : chart.decMax, chart, centerX, centerY, radius);
-    lines.push(`    <line x1="${number(centerX)}" y1="${number(centerY)}" x2="${number(edge.x)}" y2="${number(edge.y)}" />`);
+    lines.push(`    <line x1="${number(inner.x)}" y1="${number(inner.y)}" x2="${number(edge.x)}" y2="${number(edge.y)}" />`);
   }
 
   lines.push('  </g>');
@@ -1681,12 +1696,23 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   }
 
   for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
+    if (Math.abs(dec) === 90 || dec === chart.decMin || dec === chart.decMax) continue;
     const circleRadius = polarRadiusForDec(dec, chart, radius);
     lines.push(`    <text x="${number(centerX + circleRadius + 8)}" y="${number(centerY - 5)}">${dec > 0 ? '+' : ''}${dec}°</text>`);
   }
 
   lines.push('  </g>');
   return lines.join('\n');
+}
+
+function renderPolarCleanInnerCircle(chart, centerX, centerY, radius) {
+  const innerRadius = polarCleanInnerRadius(chart, radius);
+
+  return [
+    `    <g id="polar-clean-inner-circle" fill="${PRINT_CHART.background}" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
+    `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(innerRadius)}" />`,
+    '    </g>',
+  ].join('\n');
 }
 
 function renderPolarStars(chart, stars, centerX, centerY, radius) {
@@ -1765,12 +1791,13 @@ function renderPolarStarChartLayer(dataset, chart) {
       renderPolarGridLabels(chart, centerX, centerY, radius),
       renderPolarEcliptic(chart, centerX, centerY, radius),
       renderPolarConstellationLines(dataset, chart, centerX, centerY, radius),
+      renderPolarCleanInnerCircle(chart, centerX, centerY, radius),
       renderPolarStars(chart, stars, centerX, centerY, radius),
       constellationLabels,
       renderPolarStarNameLabels(chart, nameLabels, centerX, centerY, radius),
       renderPolarBayerDesignationLabels(chart, bayerLabels, centerX, centerY, radius),
-      `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
-      `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius)}" />`,
+      `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-opacity="${POLAR_OUTER_FRAME_OPACITY}" stroke-width="${POLAR_OUTER_FRAME_WIDTH_PT}pt">`,
+      `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius * POLAR_OUTER_FRAME_RADIUS_SCALE)}" />`,
       '    </g>',
       `    <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
       `      <text x="${POLAR_CHART.padding}" y="${height - 34}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / declination ${escapeXml(decSummary)} / ${stars.length.toLocaleString()} stars</text>`,
