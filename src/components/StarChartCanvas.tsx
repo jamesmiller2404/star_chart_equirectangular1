@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import {
   colorForStar,
   BRIGHT_STAR_MAGNITUDE_LIMIT,
+  CONSTELLATION_BOUNDARY_OPACITY,
+  CONSTELLATION_BOUNDARY_WIDTH_PT,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   CONSTELLATION_LABEL_OPACITY,
+  constellationBoundaryPaths,
   constellationLabelPosition,
   constellationLineSegments,
   createEclipticCoordinates,
@@ -87,6 +90,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
 
       drawGrid(context, width, height, padding);
       drawCoordinateReferenceLines(context, width, height, padding, dpr);
+      drawConstellationBoundaries(context, width, height, padding, dpr);
       drawConstellationLines(context, dataset, width, height, padding, dpr);
       drawConstellationLabels(context, dataset, width, height, padding, dpr);
 
@@ -235,6 +239,40 @@ function RadiusCurveGraph({ compression }: { compression: number }) {
       })}
     </svg>
   );
+}
+
+function drawConstellationBoundaries(
+  context: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  padding: number,
+  dpr: number,
+) {
+  const cssPixelsPerPoint = 96 / 72;
+
+  context.save();
+  context.strokeStyle = `rgba(117, 213, 169, ${CONSTELLATION_BOUNDARY_OPACITY})`;
+  context.lineWidth = CONSTELLATION_BOUNDARY_WIDTH_PT * cssPixelsPerPoint * dpr;
+  context.lineCap = 'round';
+  context.lineJoin = 'round';
+  context.setLineDash([6 * dpr, 7 * dpr]);
+
+  for (const boundary of constellationBoundaryPaths(width, height, padding)) {
+    for (const path of boundary.paths) {
+      if (path.length < 2) continue;
+
+      context.beginPath();
+      context.moveTo(path[0].x, path[0].y);
+
+      for (let index = 1; index < path.length; index += 1) {
+        context.lineTo(path[index].x, path[index].y);
+      }
+
+      context.stroke();
+    }
+  }
+
+  context.restore();
 }
 
 function drawConstellationLines(

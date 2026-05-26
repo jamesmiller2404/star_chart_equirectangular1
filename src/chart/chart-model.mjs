@@ -1,3 +1,5 @@
+import { CONSTELLATION_BOUNDARIES } from './constellation-boundaries-data.mjs';
+
 export const PRINT_CHART = {
   widthIn: 24,
   heightIn: 24,
@@ -70,6 +72,18 @@ export function pointForCoordinates(ra, dec, width = DEFAULT_CHART.width, height
   return {
     x: padding + ((24 - ra) / 24) * plotWidth,
     y: padding + ((90 - dec) / 180) * plotHeight,
+  };
+}
+
+export function pointForBoundaryCoordinate(point, width = DEFAULT_CHART.width, height = DEFAULT_CHART.height, padding = DEFAULT_CHART.padding) {
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const sourcePlotWidth = CONSTELLATION_BOUNDARIES.plotBounds.maxX - CONSTELLATION_BOUNDARIES.plotBounds.minX;
+  const sourcePlotHeight = CONSTELLATION_BOUNDARIES.plotBounds.maxY - CONSTELLATION_BOUNDARIES.plotBounds.minY;
+
+  return {
+    x: padding + ((CONSTELLATION_BOUNDARIES.plotBounds.maxX - point[0]) / sourcePlotWidth) * plotWidth,
+    y: padding + ((CONSTELLATION_BOUNDARIES.plotBounds.maxY - point[1]) / sourcePlotHeight) * plotHeight,
   };
 }
 
@@ -210,6 +224,13 @@ export function constellationLabelPosition(constellation, starsByHip, width = DE
   };
 }
 
+export function constellationBoundaryPaths(width = DEFAULT_CHART.width, height = DEFAULT_CHART.height, padding = DEFAULT_CHART.padding) {
+  return CONSTELLATION_BOUNDARIES.boundaries.map((boundary) => ({
+    iau: boundary.iau,
+    paths: boundary.paths.map((path) => path.map((point) => pointForBoundaryCoordinate(point, width, height, padding))),
+  }));
+}
+
 export function colorForStar(star) {
   return '#f2f2f2';
 }
@@ -221,6 +242,8 @@ export const GRID_LABEL_OPACITY = 0.6;
 export const CONSTELLATION_LINE_OPACITY = 0.5;
 export const CONSTELLATION_LINE_WIDTH_PT = 0.75;
 export const CONSTELLATION_LABEL_OPACITY = 0.72;
+export const CONSTELLATION_BOUNDARY_OPACITY = 0.36;
+export const CONSTELLATION_BOUNDARY_WIDTH_PT = 0.5;
 export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
 export const BRIGHT_STAR_MAGNITUDE_LIMIT = 4.2;

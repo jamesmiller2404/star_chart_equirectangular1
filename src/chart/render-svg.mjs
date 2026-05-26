@@ -2,9 +2,12 @@ import fs from 'node:fs';
 import {
   BRIGHT_STAR_MAGNITUDE_LIMIT,
   colorForStar,
+  CONSTELLATION_BOUNDARY_OPACITY,
+  CONSTELLATION_BOUNDARY_WIDTH_PT,
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   CONSTELLATION_LABEL_OPACITY,
+  constellationBoundaryPaths,
   constellationLabelPosition,
   constellationLineSegments,
   createEclipticCoordinates,
@@ -39,6 +42,7 @@ const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_P
 const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
+const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
 const MILKY_WAY_LAYER_OPACITY = 0.5;
 const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
@@ -592,6 +596,26 @@ function renderConstellationLines(dataset) {
           `      <line x1="${number(start.x)}" y1="${number(start.y)}" x2="${number(end.x)}" y2="${number(end.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
         );
       }
+    }
+
+    lines.push('    </g>');
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderConstellationBoundaries() {
+  const lines = [
+    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="#75d5a9" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${CONSTELLATION_BOUNDARY_WIDTH_PT}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
+  ];
+
+  for (const boundary of constellationBoundaryPaths()) {
+    lines.push(`    <g id="constellation-boundary-${escapeXml(boundary.iau)}">`);
+
+    for (const path of boundary.paths) {
+      if (path.length < 2) continue;
+      lines.push(`      <polyline points="${pointsAttribute(path)}" />`);
     }
 
     lines.push('    </g>');
@@ -1245,8 +1269,96 @@ function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
   };
 }
 
+function polarPointForCelestialCoordinate(coordinate, chart, centerX, centerY, radius) {
+  const [longitude, latitude] = coordinate;
+  return polarPointForCoordinates(raHoursForCelestialLongitude(longitude), latitude, chart, centerX, centerY, radius);
+}
+
 function isStarInsidePolarChart(star, chart) {
   return star.mag <= DEFAULT_MAG_LIMIT && star.dec >= chart.decMin && star.dec <= chart.decMax;
+}
+
+function polarMilkyWayPathForRing(ring, chart, centerX, centerY, radius) {
+  const points = ring.map((coordinate) => polarPointForCelestialCoordinate(coordinate, chart, centerX, centerY, radius));
+  return pathAttribute(points);
+}
+
+function createPolarMilkyWayFeaturePaths(feature, chart, centerX, centerY, radius) {
+  const paths = [];
+  if (feature.geometry?.type !== 'MultiPolygon') return paths;
+
+  for (const polygon of feature.geometry.coordinates) {
+    const path = polygon
+      .map((ring) => polarMilkyWayPathForRing(ring, chart, centerX, centerY, radius))
+      .filter(Boolean)
+      .join(' ');
+    if (path) paths.push(path);
+  }
+
+  return paths;
+}
+
+function renderPolarPlotClipPath(centerX, centerY, radius) {
+  return [
+    '  <defs>',
+    `    <clipPath id="${POLAR_CHART_PLOT_CLIP_ID}">`,
+    `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius)}" />`,
+    '    </clipPath>',
+    '  </defs>',
+  ].join('\n');
+}
+
+function renderPolarMilkyWayLayer(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="milky-way-layer" data-layer="Milky Way outline" opacity="${MILKY_WAY_LAYER_OPACITY}" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+    '    <desc>Faint Milky Way outlines from d3-celestial data/mw.json, projected into polar coordinates.</desc>',
+  ];
+
+  for (const [featureIndex, feature] of D3_CELESTIAL_MILKY_WAY.features.entries()) {
+    const layerId = escapeXml(feature.id ?? `ol${featureIndex + 1}`);
+    const opacity = MILKY_WAY_FEATURE_OPACITIES[featureIndex] ?? 0.02;
+    const fill = featureIndex >= D3_CELESTIAL_MILKY_WAY.features.length - 2 ? PRINT_CHART.text : PRINT_CHART.mutedText;
+    const paths = createPolarMilkyWayFeaturePaths(feature, chart, centerX, centerY, radius);
+
+    lines.push(`    <g id="milky-way-${layerId}" data-brightness-step="${layerId}" fill="${fill}" fill-opacity="${opacity}" fill-rule="evenodd">`);
+    for (const path of paths) {
+      lines.push(`      <path d="${path}" />`);
+    }
+    lines.push('    </g>');
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderPolarEcliptic(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="coordinate-reference-lines" fill="none" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+  ];
+  let currentPoints = [];
+
+  function flushCurrentPoints() {
+    if (currentPoints.length < 2) {
+      currentPoints = [];
+      return;
+    }
+
+    lines.push(`    <polyline class="ecliptic-segment" points="${pointsAttribute(currentPoints)}" stroke="${PRINT_CHART.constellationLine}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" stroke-dasharray="14 9" />`);
+    currentPoints = [];
+  }
+
+  for (const coordinate of createEclipticCoordinates(1)) {
+    if (coordinate.dec < chart.decMin || coordinate.dec > chart.decMax) {
+      flushCurrentPoints();
+      continue;
+    }
+
+    currentPoints.push(polarPointForCoordinates(coordinate.ra, coordinate.dec, chart, centerX, centerY, radius));
+  }
+
+  flushCurrentPoints();
+  lines.push('  </g>');
+  return lines.join('\n');
 }
 
 function renderPolarGrid(chart, centerX, centerY, radius) {
@@ -1339,8 +1451,11 @@ function renderPolarStarChartLayer(dataset, chart) {
     svg: [
       `  <g id="${chart.id}-star-chart">`,
       `    <rect width="${width}" height="${height}" fill="${PRINT_CHART.background}" />`,
+      renderPolarPlotClipPath(centerX, centerY, radius),
+      renderPolarMilkyWayLayer(chart, centerX, centerY, radius),
       renderPolarGrid(chart, centerX, centerY, radius),
       renderPolarGridLabels(chart, centerX, centerY, radius),
+      renderPolarEcliptic(chart, centerX, centerY, radius),
       renderPolarStars(chart, stars, centerX, centerY, radius),
       renderPolarStarLabels(chart, stars, centerX, centerY, radius),
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
@@ -1376,6 +1491,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0 } = {}) {
     renderGrid(width, height, padding),
     renderGridLabels(width, height, padding),
     renderCoordinateReferenceLines(width, height, padding),
+    renderConstellationBoundaries(),
     renderConstellationLines(dataset),
     renderConstellationLabels(dataset),
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
