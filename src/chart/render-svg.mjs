@@ -34,9 +34,13 @@ import {
 
 const ILLUSTRATOR_PX_PER_IN = 72;
 const TARGET_MIN_STAR_DIAMETER_PX = 0.75;
+const POLAR_TARGET_MIN_STAR_DIAMETER_PX = 1.1;
 const SVG_USER_UNITS_PER_ILLUSTRATOR_PX = PRINT_CHART.unitsPerIn / ILLUSTRATOR_PX_PER_IN;
 const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
+const POLAR_SVG_MIN_STAR_RADIUS = (POLAR_TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
+const POLAR_SVG_RADIUS_SCALE = POLAR_SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
+const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
 const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
@@ -1752,13 +1756,17 @@ function renderPolarCleanInnerCircle(chart, centerX, centerY, radius) {
 function renderPolarStars(chart, stars, centerX, centerY, radius) {
   const brightStars = stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
   const dimStars = stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
+  const polarRadiusScaleForMagnitude = (magnitude, baseScale) => {
+    const brightness = Math.min(1, Math.max(0, (DEFAULT_MAG_LIMIT - magnitude) / (DEFAULT_MAG_LIMIT + 1.5)));
+    return baseScale * (1 + brightness * (POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT - 1));
+  };
 
   function renderGroup(id, groupStars, scale, opacity = 1) {
     const opacityAttribute = opacity < 1 ? ` opacity="${opacity}"` : '';
     const lines = [`  <g id="${id}"${opacityAttribute}>`];
     for (const star of [...groupStars].sort((a, b) => b.mag - a.mag)) {
       const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
-      const starPointRadius = starRadius(star, scale) * SVG_RADIUS_SCALE;
+      const starPointRadius = starRadius(star, polarRadiusScaleForMagnitude(star.mag, scale)) * POLAR_SVG_RADIUS_SCALE;
       const strokeWidth = Math.max(0.08, Math.min(0.18, starPointRadius * 0.14));
       lines.push(`    <circle id="star-${star.id}" cx="${number(point.x)}" cy="${number(point.y)}" r="${number(starPointRadius)}" fill="${colorForStar(star)}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`);
     }
