@@ -40,6 +40,7 @@ const SVG_MIN_STAR_RADIUS = (TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_P
 const SVG_RADIUS_SCALE = SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 const POLAR_SVG_MIN_STAR_RADIUS = (POLAR_TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_USER_UNITS_PER_ILLUSTRATOR_PX;
 const POLAR_SVG_RADIUS_SCALE = POLAR_SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
+const POLAR_DIM_STAR_RADIUS_SCALE = 1.4;
 const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
 const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
@@ -727,21 +728,24 @@ function renderConstellationLines(dataset, projection = createMainChartProjectio
   return lines.join('\n');
 }
 
+function sourceBoundaryPointToEquatorial(point) {
+  return {
+    ra: point[0],
+    dec: point[1],
+  };
+}
+
 function sourceBoundaryPointToMainPoint(point, projection) {
-  const bounds = CONSTELLATION_BOUNDARIES.plotBounds;
-  const sourcePlotWidth = bounds.maxX - bounds.minX;
-  const sourcePlotHeight = bounds.maxY - bounds.minY;
-  const ra = ((bounds.maxX - point[0]) / sourcePlotWidth) * 24;
-  const dec = 90 - ((point[1] - bounds.minY) / sourcePlotHeight) * 180;
+  const { ra, dec } = sourceBoundaryPointToEquatorial(point);
   return projection.project(ra, dec);
 }
 
 function mainConstellationBoundaryPaths(projection) {
   if (projection.isFullSky) return constellationBoundaryPaths();
 
-  return CONSTELLATION_BOUNDARIES.boundaries.map((boundary) => ({
-    iau: boundary.iau,
-    paths: boundary.paths.map((path) => path.map((point) => sourceBoundaryPointToMainPoint(point, projection))),
+  return CONSTELLATION_BOUNDARIES.segments.map((segment) => ({
+    id: segment.id,
+    paths: [segment.points.map((point) => sourceBoundaryPointToMainPoint(point, projection))],
   }));
 }
 
@@ -751,7 +755,7 @@ function renderConstellationBoundaries(projection = createMainChartProjection(DE
   ];
 
   for (const boundary of mainConstellationBoundaryPaths(projection)) {
-    lines.push(`    <g id="constellation-boundary-${escapeXml(boundary.iau)}">`);
+    lines.push(`    <g id="constellation-boundary-${escapeXml(boundary.id.replaceAll(':', '-'))}" data-segment="${escapeXml(boundary.id)}">`);
 
     for (const path of boundary.paths) {
       if (path.length < 2) continue;
@@ -1429,6 +1433,11 @@ const POLAR_OUTER_FRAME_WIDTH_PT = 1.2;
 const POLAR_RA_FRAME_TICK_STEP_MINUTES = 5;
 const POLAR_RA_FRAME_MAJOR_TICK_MINUTES = new Set([20, 40]);
 const POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO = 0.5;
+const POLAR_DEC_TICK_STEP_DEGREES = 1;
+const POLAR_DEC_MAJOR_TICK_STEP_DEGREES = 5;
+const POLAR_DEC_LABEL_STEP_DEGREES = 10;
+const POLAR_DEC_MINOR_TICK_LENGTH = 8;
+const POLAR_DEC_MAJOR_TICK_LENGTH = 14;
 
 function polarChartSize() {
   return {
@@ -1474,6 +1483,10 @@ function polarPointForCelestialCoordinate(coordinate, chart, centerX, centerY, r
 
 function isStarInsidePolarChart(star, chart) {
   return star.mag <= DEFAULT_MAG_LIMIT && star.dec >= chart.decMin && star.dec <= chart.decMax;
+}
+
+function isDecInsidePolarChart(dec, chart) {
+  return dec >= chart.decMin && dec <= chart.decMax;
 }
 
 function polarMilkyWayPathForRing(ring, chart, centerX, centerY, radius) {
@@ -1588,6 +1601,50 @@ function renderPolarConstellationLines(dataset, chart, centerX, centerY, radius)
           `      <line x1="${number(startPoint.x)}" y1="${number(startPoint.y)}" x2="${number(endPoint.x)}" y2="${number(endPoint.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
         );
       }
+    }
+
+    lines.push('    </g>');
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function polarConstellationBoundaryPathSegments(path, chart, centerX, centerY, radius) {
+  const segments = [];
+  let currentPoints = [];
+
+  for (let index = 0; index < path.length; index += 1) {
+    const coordinate = sourceBoundaryPointToEquatorial(path[index]);
+    const inside = isDecInsidePolarChart(coordinate.dec, chart);
+    const previousCoordinate = index > 0 ? sourceBoundaryPointToEquatorial(path[index - 1]) : null;
+    const nextCoordinate = index < path.length - 1 ? sourceBoundaryPointToEquatorial(path[index + 1]) : null;
+    const previousInside = previousCoordinate ? isDecInsidePolarChart(previousCoordinate.dec, chart) : false;
+    const nextInside = nextCoordinate ? isDecInsidePolarChart(nextCoordinate.dec, chart) : false;
+
+    if (inside || previousInside || nextInside) {
+      currentPoints.push(polarPointForCoordinates(coordinate.ra, coordinate.dec, chart, centerX, centerY, radius));
+      continue;
+    }
+
+    if (currentPoints.length >= 2) segments.push(currentPoints);
+    currentPoints = [];
+  }
+
+  if (currentPoints.length >= 2) segments.push(currentPoints);
+  return segments;
+}
+
+function renderPolarConstellationBoundaries(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="#75d5a9" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${CONSTELLATION_BOUNDARY_WIDTH_PT}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+  ];
+
+  for (const boundary of CONSTELLATION_BOUNDARIES.segments) {
+    lines.push(`    <g id="constellation-boundary-${escapeXml(boundary.id.replaceAll(':', '-'))}" data-segment="${escapeXml(boundary.id)}">`);
+
+    for (const segment of polarConstellationBoundaryPathSegments(boundary.points, chart, centerX, centerY, radius)) {
+      lines.push(`      <polyline points="${pointsAttribute(segment)}" />`);
     }
 
     lines.push('    </g>');
@@ -1721,6 +1778,28 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   return lines.join('\n');
 }
 
+function renderPolarDecAxisTicks(chart, centerX, centerY, radius) {
+  const lines = [
+    `  <g id="polar-dec-axis-ticks" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_LABEL_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
+  ];
+
+  for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += POLAR_DEC_TICK_STEP_DEGREES) {
+    if (Math.abs(dec) === 90 || dec === chart.decMin || dec === chart.decMax) continue;
+    if (isOnStep(dec, POLAR_DEC_LABEL_STEP_DEGREES)) continue;
+
+    const tickRadius = polarRadiusForDec(dec, chart, radius);
+    const isMajorTick = isOnStep(dec, POLAR_DEC_MAJOR_TICK_STEP_DEGREES);
+    const tickLength = isMajorTick ? POLAR_DEC_MAJOR_TICK_LENGTH : POLAR_DEC_MINOR_TICK_LENGTH;
+    const x = centerX + tickRadius;
+    const y1 = centerY - tickLength / 2;
+    const y2 = centerY + tickLength / 2;
+    lines.push(`    <line x1="${number(x)}" y1="${number(y1)}" x2="${number(x)}" y2="${number(y2)}" />`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
 function renderPolarRaFrameTicks(centerX, centerY, radius) {
   const outerRadius = radius * POLAR_OUTER_FRAME_RADIUS_SCALE;
   const frameBandWidth = outerRadius - radius;
@@ -1775,7 +1854,7 @@ function renderPolarStars(chart, stars, centerX, centerY, radius) {
   }
 
   return [
-    renderGroup('stars-dim', dimStars, 1, DIM_STAR_OPACITY),
+    renderGroup('stars-dim', dimStars, POLAR_DIM_STAR_RADIUS_SCALE, DIM_STAR_OPACITY),
     renderGroup('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT)),
   ].join('\n');
 }
@@ -1831,8 +1910,10 @@ function renderPolarStarChartLayer(dataset, chart) {
       renderPolarMilkyWayLayer(chart, centerX, centerY, radius),
       renderPolarGrid(chart, centerX, centerY, radius),
       renderPolarGridLabels(chart, centerX, centerY, radius),
+      renderPolarDecAxisTicks(chart, centerX, centerY, radius),
       renderPolarEcliptic(chart, centerX, centerY, radius),
       renderPolarCleanInnerCircle(chart, centerX, centerY, radius),
+      renderPolarConstellationBoundaries(chart, centerX, centerY, radius),
       renderPolarConstellationLines(dataset, chart, centerX, centerY, radius),
       renderPolarStars(chart, stars, centerX, centerY, radius),
       constellationLabels,

@@ -76,15 +76,7 @@ export function pointForCoordinates(ra, dec, width = DEFAULT_CHART.width, height
 }
 
 export function pointForBoundaryCoordinate(point, width = DEFAULT_CHART.width, height = DEFAULT_CHART.height, padding = DEFAULT_CHART.padding) {
-  const plotWidth = width - padding * 2;
-  const plotHeight = height - padding * 2;
-  const sourcePlotWidth = CONSTELLATION_BOUNDARIES.plotBounds.maxX - CONSTELLATION_BOUNDARIES.plotBounds.minX;
-  const sourcePlotHeight = CONSTELLATION_BOUNDARIES.plotBounds.maxY - CONSTELLATION_BOUNDARIES.plotBounds.minY;
-
-  return {
-    x: padding + ((CONSTELLATION_BOUNDARIES.plotBounds.maxX - point[0]) / sourcePlotWidth) * plotWidth,
-    y: padding + ((CONSTELLATION_BOUNDARIES.plotBounds.maxY - point[1]) / sourcePlotHeight) * plotHeight,
-  };
+  return pointForCoordinates(point[0], point[1], width, height, padding);
 }
 
 export const ECLIPTIC_OBLIQUITY_DEGREES = 23.4392911;
@@ -225,9 +217,9 @@ export function constellationLabelPosition(constellation, starsByHip, width = DE
 }
 
 export function constellationBoundaryPaths(width = DEFAULT_CHART.width, height = DEFAULT_CHART.height, padding = DEFAULT_CHART.padding) {
-  return CONSTELLATION_BOUNDARIES.boundaries.map((boundary) => ({
-    iau: boundary.iau,
-    paths: boundary.paths.map((path) => path.map((point) => pointForBoundaryCoordinate(point, width, height, padding))),
+  return CONSTELLATION_BOUNDARIES.segments.map((segment) => ({
+    id: segment.id,
+    paths: [segment.points.map((point) => pointForBoundaryCoordinate(point, width, height, padding))],
   }));
 }
 
