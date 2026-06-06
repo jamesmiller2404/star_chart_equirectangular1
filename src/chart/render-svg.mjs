@@ -61,6 +61,14 @@ const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
 const MILKY_WAY_LAYER_OPACITY = 0.65;
 const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
+const MAIN_CHART_CLUSTER_LABELS = [
+  {
+    id: 'pleiades',
+    label: 'Pleiades',
+    ra: 3 + 48 / 60,
+    dec: 26.2,
+  },
+];
 export const PLEIADES_M45_BOUNDS = {
   raMin: 3 + 42 / 60,
   raMax: 3 + 54 / 60,
@@ -967,6 +975,26 @@ function renderBayerDesignationLabels(stars, projection = createMainChartProject
     const point = mainPointForStar(star, projection);
     lines.push(
       `    <text id="bayer-designation-label-${star.id}" x="${number(point.x + MAIN_STAR_LABEL_X_OFFSET)}" y="${number(point.y + MAIN_STAR_LABEL_Y_OFFSET)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`,
+    );
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function isPleiadesMainChartLabelStar(star) {
+  return isCoordinateInsideInsetBounds(PLEIADES_M45_BOUNDS, star.ra, star.dec, star.mag);
+}
+
+function renderMainClusterNameLabels(clusterLabels, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
+  const lines = [
+    `  <g id="cluster-name-labels" fill="${STAR_NAME_LABEL_FILL}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${STAR_NAME_LABEL_FONT_SIZE}" font-weight="600" text-anchor="middle">`,
+  ];
+
+  for (const label of clusterLabels) {
+    const point = projection.project(label.ra, label.dec);
+    lines.push(
+      `    <text id="cluster-name-label-${escapeXml(label.id)}" x="${number(point.x)}" y="${number(point.y)}">${escapeXml(label.label)}</text>`,
     );
   }
 
@@ -2068,8 +2096,10 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
   const brightStars = stars.filter((star) => star.mag <= BRIGHT_STAR_MAGNITUDE_LIMIT);
   const dimStars = stars.filter((star) => star.mag > BRIGHT_STAR_MAGNITUDE_LIMIT);
   const labels = stars.filter(shouldLabelStar);
-  const nameLabels = labels.filter((star) => star.proper);
-  const bayerLabels = stars.filter(shouldLabelBayerStar);
+  const mainChartLabeledStars = stars.filter((star) => !isPleiadesMainChartLabelStar(star));
+  const nameLabels = labels.filter((star) => star.proper && !isPleiadesMainChartLabelStar(star));
+  const bayerLabels = mainChartLabeledStars.filter(shouldLabelBayerStar);
+  const clusterNameLabels = MAIN_CHART_CLUSTER_LABELS.filter((label) => projection.containsDec(label.dec));
   const decSummary = `${chart.decMin > 0 ? '+' : ''}${chart.decMin}Â° to ${chart.decMax > 0 ? '+' : ''}${chart.decMax}Â°`;
   const transform = chartX || chartY ? ` transform="translate(${chartX} ${chartY})"` : '';
   const parts = [
@@ -2089,6 +2119,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
     renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY, projection),
     renderStarNameLabels(nameLabels, projection),
     renderBayerDesignationLabels(bayerLabels, projection),
+    renderMainClusterNameLabels(clusterNameLabels, projection),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
     `    <rect x="${padding}" y="${number(projection.plotTop)}" width="${width - padding * 2}" height="${number(projection.plotHeight)}" />`,
     '  </g>',
@@ -2103,7 +2134,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
 
   return {
     svg: parts.join('\n'),
-    labelCount: nameLabels.length + bayerLabels.length,
+    labelCount: nameLabels.length + bayerLabels.length + clusterNameLabels.length,
     starCount: stars.length,
   };
 }
