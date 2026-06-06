@@ -213,6 +213,7 @@ export const POLAR_STAR_CHARTS = {
     decMin: -90,
     decMax: -50,
     poleDec: -90,
+    mirrorRa: true,
   },
 };
 
@@ -1460,7 +1461,7 @@ function polarCleanInnerRadius(chart, radius) {
 }
 
 function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
-  const angle = (ra / 24) * Math.PI * 2;
+  const angle = polarAngleForRa(ra, chart);
   const r = polarRadiusForDec(dec, chart, radius);
   return {
     x: centerX + Math.sin(angle) * r,
@@ -1468,8 +1469,13 @@ function polarPointForCoordinates(ra, dec, chart, centerX, centerY, radius) {
   };
 }
 
-function polarPointForRaRadius(ra, radius, centerX, centerY) {
+function polarAngleForRa(ra, chart) {
   const angle = (ra / 24) * Math.PI * 2;
+  return chart.mirrorRa ? -angle : angle;
+}
+
+function polarPointForRaRadius(ra, chart, radius, centerX, centerY) {
+  const angle = polarAngleForRa(ra, chart);
   return {
     x: centerX + Math.sin(angle) * radius,
     y: centerY - Math.cos(angle) * radius,
@@ -1576,8 +1582,10 @@ function renderPolarConstellationLines(dataset, chart, centerX, centerY, radius)
   if (!dataset.constellations?.lines?.length) return '';
 
   const starsByHip = createHipStarMap(dataset.stars);
+  const stroke = chart.id === 'south-polar' ? '#fff' : PRINT_CHART.constellationLine;
+  const strokeWidth = chart.id === 'south-polar' ? 0.8 : CONSTELLATION_LINE_WIDTH_PT;
   const lines = [
-    `  <g id="constellation-lines" fill="none" stroke="${PRINT_CHART.constellationLine}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+    `  <g id="constellation-lines" fill="none" stroke="${stroke}" stroke-opacity="${CONSTELLATION_LINE_OPACITY}" stroke-linecap="round" stroke-linejoin="round" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
   ];
 
   for (const constellation of dataset.constellations.lines) {
@@ -1598,7 +1606,7 @@ function renderPolarConstellationLines(dataset, chart, centerX, centerY, radius)
         const startPoint = polarPointForCoordinates(start.ra, start.dec, chart, centerX, centerY, radius);
         const endPoint = polarPointForCoordinates(end.ra, end.dec, chart, centerX, centerY, radius);
         lines.push(
-          `      <line x1="${number(startPoint.x)}" y1="${number(startPoint.y)}" x2="${number(endPoint.x)}" y2="${number(endPoint.y)}" stroke-width="${CONSTELLATION_LINE_WIDTH_PT}pt" />`,
+          `      <line x1="${number(startPoint.x)}" y1="${number(startPoint.y)}" x2="${number(endPoint.x)}" y2="${number(endPoint.y)}" stroke-width="${strokeWidth}pt" />`,
         );
       }
     }
@@ -1636,8 +1644,10 @@ function polarConstellationBoundaryPathSegments(path, chart, centerX, centerY, r
 }
 
 function renderPolarConstellationBoundaries(chart, centerX, centerY, radius) {
+  const stroke = chart.id === 'south-polar' ? '#fff' : '#75d5a9';
+  const strokeWidth = chart.id === 'south-polar' ? 0.6 : CONSTELLATION_BOUNDARY_WIDTH_PT;
   const lines = [
-    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="#75d5a9" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${CONSTELLATION_BOUNDARY_WIDTH_PT}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="${stroke}" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${strokeWidth}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
   ];
 
   for (const boundary of CONSTELLATION_BOUNDARIES.segments) {
@@ -1749,7 +1759,7 @@ function renderPolarGrid(chart, centerX, centerY, radius) {
   for (const hour of createRaTicks(1)) {
     if (hour === 24) continue;
     const inner = polarPointForCoordinates(hour, polarCleanInnerDec(chart), chart, centerX, centerY, radius);
-    const edge = polarPointForRaRadius(hour, outerRadius, centerX, centerY);
+    const edge = polarPointForRaRadius(hour, chart, outerRadius, centerX, centerY);
     lines.push(`    <line x1="${number(inner.x)}" y1="${number(inner.y)}" x2="${number(edge.x)}" y2="${number(edge.y)}" />`);
   }
 
@@ -1758,6 +1768,8 @@ function renderPolarGrid(chart, centerX, centerY, radius) {
 }
 
 function renderPolarGridLabels(chart, centerX, centerY, radius) {
+  const decLabelDirection = chart.mirrorRa ? -1 : 1;
+  const decLabelAnchor = chart.mirrorRa ? 'end' : 'start';
   const lines = [
     `  <g id="polar-grid-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
   ];
@@ -1771,7 +1783,8 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
     if (Math.abs(dec) === 90 || dec === chart.decMin || dec === chart.decMax) continue;
     const circleRadius = polarRadiusForDec(dec, chart, radius);
-    lines.push(`    <text x="${number(centerX + circleRadius + 8)}" y="${number(centerY - 5)}">${dec > 0 ? '+' : ''}${dec}°</text>`);
+    const x = centerX + decLabelDirection * (circleRadius + 8);
+    lines.push(`    <text x="${number(x)}" y="${number(centerY - 5)}" text-anchor="${decLabelAnchor}">${dec > 0 ? '+' : ''}${dec}°</text>`);
   }
 
   lines.push('  </g>');
@@ -1779,6 +1792,7 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
 }
 
 function renderPolarDecAxisTicks(chart, centerX, centerY, radius) {
+  const decAxisDirection = chart.mirrorRa ? -1 : 1;
   const lines = [
     `  <g id="polar-dec-axis-ticks" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_LABEL_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
   ];
@@ -1790,7 +1804,7 @@ function renderPolarDecAxisTicks(chart, centerX, centerY, radius) {
     const tickRadius = polarRadiusForDec(dec, chart, radius);
     const isMajorTick = isOnStep(dec, POLAR_DEC_MAJOR_TICK_STEP_DEGREES);
     const tickLength = isMajorTick ? POLAR_DEC_MAJOR_TICK_LENGTH : POLAR_DEC_MINOR_TICK_LENGTH;
-    const x = centerX + tickRadius;
+    const x = centerX + decAxisDirection * tickRadius;
     const y1 = centerY - tickLength / 2;
     const y2 = centerY + tickLength / 2;
     lines.push(`    <line x1="${number(x)}" y1="${number(y1)}" x2="${number(x)}" y2="${number(y2)}" />`);
@@ -1800,7 +1814,7 @@ function renderPolarDecAxisTicks(chart, centerX, centerY, radius) {
   return lines.join('\n');
 }
 
-function renderPolarRaFrameTicks(centerX, centerY, radius) {
+function renderPolarRaFrameTicks(chart, centerX, centerY, radius) {
   const outerRadius = radius * POLAR_OUTER_FRAME_RADIUS_SCALE;
   const frameBandWidth = outerRadius - radius;
   const lines = [
@@ -1813,8 +1827,8 @@ function renderPolarRaFrameTicks(centerX, centerY, radius) {
     if (minuteWithinHour === 0) continue;
     const isMajorTick = POLAR_RA_FRAME_MAJOR_TICK_MINUTES.has(minuteWithinHour);
     const tickInnerRadius = isMajorTick ? radius : outerRadius - frameBandWidth * POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO;
-    const inner = polarPointForRaRadius(tick.hour, tickInnerRadius, centerX, centerY);
-    const outer = polarPointForRaRadius(tick.hour, outerRadius, centerX, centerY);
+    const inner = polarPointForRaRadius(tick.hour, chart, tickInnerRadius, centerX, centerY);
+    const outer = polarPointForRaRadius(tick.hour, chart, outerRadius, centerX, centerY);
     lines.push(`      <line x1="${number(inner.x)}" y1="${number(inner.y)}" x2="${number(outer.x)}" y2="${number(outer.y)}" />`);
   }
 
@@ -1919,7 +1933,7 @@ function renderPolarStarChartLayer(dataset, chart) {
       constellationLabels,
       renderPolarStarNameLabels(chart, nameLabels, centerX, centerY, radius),
       renderPolarBayerDesignationLabels(chart, bayerLabels, centerX, centerY, radius),
-      renderPolarRaFrameTicks(centerX, centerY, radius),
+      renderPolarRaFrameTicks(chart, centerX, centerY, radius),
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-opacity="${POLAR_OUTER_FRAME_OPACITY}" stroke-width="${POLAR_OUTER_FRAME_WIDTH_PT}pt">`,
       `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius * POLAR_OUTER_FRAME_RADIUS_SCALE)}" />`,
       '    </g>',
