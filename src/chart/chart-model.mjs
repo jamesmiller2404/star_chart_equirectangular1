@@ -314,6 +314,12 @@ const BAYER_GREEK_LETTERS = {
   Ome: 'ω',
 };
 
+const BAYER_GREEK_LETTER_PATTERN = new RegExp(
+  `^(?:\\d+)?(${Object.keys(BAYER_GREEK_LETTERS)
+    .sort((a, b) => b.length - a.length)
+    .join('|')})(\\d*)`,
+);
+
 const SUPERSCRIPT_DIGITS = {
   0: '⁰',
   1: '¹',
@@ -335,7 +341,7 @@ function superscriptNumber(value) {
 }
 
 export function bayerGreekLetterForStar(star) {
-  const match = String(star.bf ?? '').trim().match(/^(?:\d+)?([A-Z][a-z]{2})(\d*)/);
+  const match = String(star.bf ?? '').trim().match(BAYER_GREEK_LETTER_PATTERN);
   if (!match) return '';
 
   const letter = BAYER_GREEK_LETTERS[match[1]];
@@ -349,7 +355,7 @@ export function shouldLabelStar(star) {
 }
 
 export function shouldLabelBayerStar(star) {
-  return Boolean(bayerGreekLetterForStar(star)) && (Boolean(star.proper) || star.mag <= 4.2);
+  return Boolean(bayerGreekLetterForStar(star));
 }
 
 export function escapeXml(value) {
