@@ -42,6 +42,11 @@ const POLAR_SVG_MIN_STAR_RADIUS = (POLAR_TARGET_MIN_STAR_DIAMETER_PX / 2) * SVG_
 const POLAR_SVG_RADIUS_SCALE = POLAR_SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 const POLAR_DIM_STAR_RADIUS_SCALE = 1.4;
 const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
+const STAR_LABEL_TIGHTEN_AXIS_PX = Math.sqrt(9.5);
+const MAIN_STAR_LABEL_X_OFFSET = (9 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
+const MAIN_STAR_LABEL_Y_OFFSET = (-7 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
+const POLAR_STAR_LABEL_X_OFFSET = (8 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
+const POLAR_STAR_LABEL_Y_OFFSET = (-6 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
 const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
@@ -834,7 +839,7 @@ function renderStarNameLabels(stars, projection = createMainChartProjection(DEFA
   for (const star of stars) {
     const point = mainPointForStar(star, projection);
     lines.push(
-      `    <text id="star-name-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y - 7)}">${escapeXml(labelForStar(star))}</text>`,
+      `    <text id="star-name-label-${star.id}" x="${number(point.x + MAIN_STAR_LABEL_X_OFFSET)}" y="${number(point.y + MAIN_STAR_LABEL_Y_OFFSET)}">${escapeXml(labelForStar(star))}</text>`,
     );
   }
 
@@ -849,9 +854,8 @@ function renderBayerDesignationLabels(stars, projection = createMainChartProject
 
   for (const star of stars) {
     const point = mainPointForStar(star, projection);
-    const yOffset = star.proper ? 9 : -7;
     lines.push(
-      `    <text id="bayer-designation-label-${star.id}" x="${number(point.x + 9)}" y="${number(point.y + yOffset)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`,
+      `    <text id="bayer-designation-label-${star.id}" x="${number(point.x + MAIN_STAR_LABEL_X_OFFSET)}" y="${number(point.y + MAIN_STAR_LABEL_Y_OFFSET)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`,
     );
   }
 
@@ -1881,7 +1885,7 @@ function renderPolarStarNameLabels(chart, stars, centerX, centerY, radius) {
 
   for (const star of labelStars) {
     const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
-    lines.push(`    <text id="star-name-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y - 6)}">${escapeXml(labelForStar(star))}</text>`);
+    lines.push(`    <text id="star-name-label-${star.id}" x="${number(point.x + POLAR_STAR_LABEL_X_OFFSET)}" y="${number(point.y + POLAR_STAR_LABEL_Y_OFFSET)}">${escapeXml(labelForStar(star))}</text>`);
   }
 
   lines.push('  </g>');
@@ -1896,8 +1900,7 @@ function renderPolarBayerDesignationLabels(chart, stars, centerX, centerY, radiu
 
   for (const star of labelStars) {
     const point = polarPointForCoordinates(star.ra, star.dec, chart, centerX, centerY, radius);
-    const yOffset = star.proper ? 9 : -6;
-    lines.push(`    <text id="bayer-designation-label-${star.id}" x="${number(point.x + 8)}" y="${number(point.y + yOffset)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`);
+    lines.push(`    <text id="bayer-designation-label-${star.id}" x="${number(point.x + POLAR_STAR_LABEL_X_OFFSET)}" y="${number(point.y + POLAR_STAR_LABEL_Y_OFFSET)}">${escapeXml(bayerGreekLetterForStar(star))}</text>`);
   }
 
   lines.push('  </g>');
