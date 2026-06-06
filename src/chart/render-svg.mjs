@@ -1853,7 +1853,7 @@ function renderPolarCleanInnerCircle(chart, centerX, centerY, radius) {
   const innerRadius = polarCleanInnerRadius(chart, radius);
 
   return [
-    `    <g id="polar-clean-inner-circle" fill="${PRINT_CHART.background}" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
+    `    <g id="polar-clean-inner-circle" fill="#000000" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
     `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(innerRadius)}" />`,
     '    </g>',
   ].join('\n');
