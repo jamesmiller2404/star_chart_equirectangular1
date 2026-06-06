@@ -1981,8 +1981,8 @@ function renderPolarStars(chart, stars, centerX, centerY, radius) {
   }
 
   return [
-    renderGroup('stars-dim', dimStars, POLAR_DIM_STAR_RADIUS_SCALE, DIM_STAR_OPACITY),
     renderGroup('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT)),
+    renderGroup('stars-dim', dimStars, POLAR_DIM_STAR_RADIUS_SCALE, DIM_STAR_OPACITY),
   ].join('\n');
 }
 
@@ -2085,8 +2085,8 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
     renderConstellationBoundaries(projection),
     renderConstellationLines({ ...dataset, stars }, projection),
     renderConstellationLabels({ ...dataset, stars }, projection),
-    renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY, projection),
     renderStars('stars-bright', brightStars, renderedStarRadiusScaleForMagnitude(BRIGHT_STAR_MAGNITUDE_LIMIT), 1, projection),
+    renderStars('stars-dim', dimStars, 1, DIM_STAR_OPACITY, projection),
     renderStarNameLabels(nameLabels, projection),
     renderBayerDesignationLabels(bayerLabels, projection),
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
