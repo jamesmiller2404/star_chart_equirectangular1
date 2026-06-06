@@ -43,6 +43,15 @@ const POLAR_SVG_RADIUS_SCALE = POLAR_SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 const POLAR_DIM_STAR_RADIUS_SCALE = 1.4;
 const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
 const STAR_LABEL_TIGHTEN_AXIS_PX = Math.sqrt(9.5);
+const STAR_NAME_LABEL_FONT_FAMILY = "'Alegreya Sans SC Thin', 'Alegreya Sans SC', sans-serif";
+const STAR_NAME_LABEL_FONT_SIZE = '5.6pt';
+const STAR_NAME_LABEL_FILL = '#ffffff';
+const BAYER_LABEL_FONT_FAMILY = "'Minion Pro', serif";
+const BAYER_LABEL_FONT_SIZE = '5.6pt';
+const BAYER_LABEL_FILL = '#ffffff';
+const CONSTELLATION_LABEL_FONT_FAMILY = "Garamond, serif";
+const CONSTELLATION_LABEL_FONT_SIZE = '5.6pt';
+const CONSTELLATION_LABEL_FILL = '#ffffff';
 const MAIN_STAR_LABEL_X_OFFSET = (9 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const MAIN_STAR_LABEL_Y_OFFSET = (-7 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const POLAR_STAR_LABEL_X_OFFSET = (8 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
@@ -815,7 +824,7 @@ function renderConstellationLabels(dataset, projection = createMainChartProjecti
 
   const starsByHip = createHipStarMap(dataset.stars);
   const lines = [
-    `  <g id="constellation-abbreviation-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${CONSTELLATION_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="9pt" font-weight="700" letter-spacing="0.6" text-anchor="middle">`,
+    `  <g id="constellation-abbreviation-labels" fill="${CONSTELLATION_LABEL_FILL}" font-family="${CONSTELLATION_LABEL_FONT_FAMILY}" font-size="${CONSTELLATION_LABEL_FONT_SIZE}" font-weight="700" font-variant="small-caps" letter-spacing="0.6" text-anchor="middle">`,
   ];
 
   for (const constellation of dataset.constellations.lines) {
@@ -833,7 +842,7 @@ function renderConstellationLabels(dataset, projection = createMainChartProjecti
 
 function renderStarNameLabels(stars, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
-    `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="star-name-labels" fill="${STAR_NAME_LABEL_FILL}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${STAR_NAME_LABEL_FONT_SIZE}">`,
   ];
 
   for (const star of stars) {
@@ -849,7 +858,7 @@ function renderStarNameLabels(stars, projection = createMainChartProjection(DEFA
 
 function renderBayerDesignationLabels(stars, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
-    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="7pt" font-style="italic">`,
+    `  <g id="bayer-designation-labels" fill="${BAYER_LABEL_FILL}" font-family="${BAYER_LABEL_FONT_FAMILY}" font-size="${BAYER_LABEL_FONT_SIZE}" font-weight="600" font-style="italic">`,
   ];
 
   for (const star of stars) {
@@ -1731,7 +1740,7 @@ function renderPolarConstellationLabels(dataset, chart, centerX, centerY, radius
 
   const starsByHip = createHipStarMap(dataset.stars);
   const lines = [
-    `  <g id="constellation-abbreviation-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${CONSTELLATION_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="8pt" font-weight="700" letter-spacing="0.6" text-anchor="middle" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+    `  <g id="constellation-abbreviation-labels" fill="${CONSTELLATION_LABEL_FILL}" font-family="${CONSTELLATION_LABEL_FONT_FAMILY}" font-size="${CONSTELLATION_LABEL_FONT_SIZE}" font-weight="700" font-variant="small-caps" letter-spacing="0.6" text-anchor="middle" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
   ];
 
   for (const constellation of dataset.constellations.lines) {
@@ -1880,7 +1889,7 @@ function renderPolarStars(chart, stars, centerX, centerY, radius) {
 function renderPolarStarNameLabels(chart, stars, centerX, centerY, radius) {
   const labelStars = stars.filter((star) => star.proper);
   const lines = [
-    `  <g id="star-name-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="14">`,
+    `  <g id="star-name-labels" fill="${STAR_NAME_LABEL_FILL}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${STAR_NAME_LABEL_FONT_SIZE}">`,
   ];
 
   for (const star of labelStars) {
@@ -1895,7 +1904,7 @@ function renderPolarStarNameLabels(chart, stars, centerX, centerY, radius) {
 function renderPolarBayerDesignationLabels(chart, stars, centerX, centerY, radius) {
   const labelStars = stars.filter(shouldLabelBayerStar);
   const lines = [
-    `  <g id="bayer-designation-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="7pt" font-style="italic">`,
+    `  <g id="bayer-designation-labels" fill="${BAYER_LABEL_FILL}" font-family="${BAYER_LABEL_FONT_FAMILY}" font-size="${BAYER_LABEL_FONT_SIZE}" font-weight="600" font-style="italic">`,
   ];
 
   for (const star of labelStars) {
