@@ -228,14 +228,14 @@ export function colorForStar(star) {
 }
 
 export const DEFAULT_MAG_LIMIT = 6.5;
-export const DIM_STAR_OPACITY = 0.75;
+export const DIM_STAR_OPACITY = 1.0;
 export const GRID_OPACITY = 0.35;
 export const GRID_LABEL_OPACITY = 0.6;
 export const CONSTELLATION_LINE_OPACITY = 0.5;
 export const CONSTELLATION_LINE_WIDTH_PT = 0.75;
 export const CONSTELLATION_LABEL_OPACITY = 0.72;
-export const CONSTELLATION_BOUNDARY_OPACITY = 0.36;
-export const CONSTELLATION_BOUNDARY_WIDTH_PT = 0.5;
+export const CONSTELLATION_BOUNDARY_OPACITY = 0.5;
+export const CONSTELLATION_BOUNDARY_WIDTH_PT = 0.35;
 export const MIN_STAR_RADIUS = 0.75;
 export const MAX_STAR_RADIUS = 3;
 export const BRIGHT_STAR_MAGNITUDE_LIMIT = 4.2;

@@ -8,7 +8,6 @@ import {
   CONSTELLATION_LINE_OPACITY,
   CONSTELLATION_LINE_WIDTH_PT,
   CONSTELLATION_LABEL_OPACITY,
-  constellationBoundaryPaths,
   createEclipticCoordinates,
   createHipStarMap,
   createRaMinuteTicks,
@@ -43,14 +42,15 @@ const POLAR_SVG_RADIUS_SCALE = POLAR_SVG_MIN_STAR_RADIUS / MIN_STAR_RADIUS;
 const POLAR_DIM_STAR_RADIUS_SCALE = 1.4;
 const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
 const STAR_LABEL_TIGHTEN_AXIS_PX = Math.sqrt(9.5);
+const illustratorPointSize = (points) => Number((points * SVG_USER_UNITS_PER_ILLUSTRATOR_PX).toFixed(3));
 const STAR_NAME_LABEL_FONT_FAMILY = "'Alegreya Sans SC Thin', 'Alegreya Sans SC', sans-serif";
-const STAR_NAME_LABEL_FONT_SIZE = '5.6pt';
+const STAR_NAME_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const STAR_NAME_LABEL_FILL = '#ffffff';
 const BAYER_LABEL_FONT_FAMILY = "'Minion Pro', serif";
-const BAYER_LABEL_FONT_SIZE = '5.6pt';
+const BAYER_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const BAYER_LABEL_FILL = '#ffffff';
 const CONSTELLATION_LABEL_FONT_FAMILY = "Garamond, serif";
-const CONSTELLATION_LABEL_FONT_SIZE = '5.6pt';
+const CONSTELLATION_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const CONSTELLATION_LABEL_FILL = '#ffffff';
 const MAIN_STAR_LABEL_X_OFFSET = (9 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const MAIN_STAR_LABEL_Y_OFFSET = (-7 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
@@ -59,7 +59,7 @@ const POLAR_STAR_LABEL_Y_OFFSET = (-6 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
 const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
-const MILKY_WAY_LAYER_OPACITY = 0.5;
+const MILKY_WAY_LAYER_OPACITY = 0.65;
 const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
 export const PLEIADES_M45_BOUNDS = {
   raMin: 3 + 42 / 60,
@@ -624,7 +624,7 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
 
 function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   const lines = [
-    `  <g id="ra-dec-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="ra-dec-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(18)}">`,
   ];
 
   for (const hour of createRaTicks(1)) {
@@ -750,23 +750,125 @@ function sourceBoundaryPointToEquatorial(point) {
   };
 }
 
-function sourceBoundaryPointToMainPoint(point, projection) {
-  const { ra, dec } = sourceBoundaryPointToEquatorial(point);
-  return projection.project(ra, dec);
+function unwrappedBoundaryEnd(start, end) {
+  const deltaRa = Math.abs(start.ra - end.ra);
+  if (deltaRa <= 12) return end;
+  return {
+    ...end,
+    ra: start.ra < end.ra ? end.ra - 24 : end.ra + 24,
+  };
+}
+
+function interpolateBoundaryPoint(start, end, t) {
+  return {
+    ra: start.ra + (end.ra - start.ra) * t,
+    dec: start.dec + (end.dec - start.dec) * t,
+  };
+}
+
+function clipBoundarySegmentToProjection(start, end, projection) {
+  let tMin = 0;
+  let tMax = 1;
+  const decDelta = end.dec - start.dec;
+
+  const clipLower = (decLimit) => {
+    if (decDelta === 0) return start.dec >= decLimit;
+    const t = (decLimit - start.dec) / decDelta;
+    if (decDelta > 0) tMin = Math.max(tMin, t);
+    else tMax = Math.min(tMax, t);
+    return true;
+  };
+
+  const clipUpper = (decLimit) => {
+    if (decDelta === 0) return start.dec <= decLimit;
+    const t = (decLimit - start.dec) / decDelta;
+    if (decDelta > 0) tMax = Math.min(tMax, t);
+    else tMin = Math.max(tMin, t);
+    return true;
+  };
+
+  if (!clipLower(projection.decMin) || !clipUpper(projection.decMax) || tMin > tMax) return null;
+
+  return [
+    interpolateBoundaryPoint(start, end, tMin),
+    interpolateBoundaryPoint(start, end, tMax),
+  ];
+}
+
+function normalizedBoundaryRa(ra) {
+  if (ra < 0) return ra + 24;
+  if (ra > 24) return ra - 24;
+  return ra;
+}
+
+function projectBoundaryPoint(point, projection) {
+  return projection.project(normalizedBoundaryRa(point.ra), point.dec);
+}
+
+function pointsAreEqual(a, b) {
+  return Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
+}
+
+function appendBoundaryPathPiece(paths, piece) {
+  if (piece.length < 2) return;
+
+  const currentPath = paths.at(-1);
+  if (currentPath?.length && pointsAreEqual(currentPath.at(-1), piece[0])) {
+    currentPath.push(...piece.slice(1));
+    return;
+  }
+
+  paths.push([...piece]);
+}
+
+function mainBoundarySegmentPieces(start, end, projection) {
+  const clippedSegment = clipBoundarySegmentToProjection(start, unwrappedBoundaryEnd(start, end), projection);
+  if (!clippedSegment) return [];
+
+  const [clippedStart, clippedEnd] = clippedSegment;
+  const crossesLeftSeam = clippedStart.ra >= 0 && clippedEnd.ra < 0;
+  const crossesRightSeam = clippedStart.ra <= 24 && clippedEnd.ra > 24;
+
+  if (!crossesLeftSeam && !crossesRightSeam) {
+    return [[projectBoundaryPoint(clippedStart, projection), projectBoundaryPoint(clippedEnd, projection)]];
+  }
+
+  const seamRa = crossesLeftSeam ? 0 : 24;
+  const t = (seamRa - clippedStart.ra) / (clippedEnd.ra - clippedStart.ra);
+  const seamDec = clippedStart.dec + (clippedEnd.dec - clippedStart.dec) * t;
+  const oppositeSeamRa = crossesLeftSeam ? 24 : 0;
+
+  return [
+    [projectBoundaryPoint(clippedStart, projection), projection.project(seamRa, seamDec)],
+    [projection.project(oppositeSeamRa, seamDec), projectBoundaryPoint(clippedEnd, projection)],
+  ];
+}
+
+function mainConstellationBoundaryPathSegments(points, projection) {
+  const paths = [];
+
+  for (let index = 1; index < points.length; index += 1) {
+    const start = sourceBoundaryPointToEquatorial(points[index - 1]);
+    const end = sourceBoundaryPointToEquatorial(points[index]);
+
+    for (const piece of mainBoundarySegmentPieces(start, end, projection)) {
+      appendBoundaryPathPiece(paths, piece);
+    }
+  }
+
+  return paths;
 }
 
 function mainConstellationBoundaryPaths(projection) {
-  if (projection.isFullSky) return constellationBoundaryPaths();
-
   return CONSTELLATION_BOUNDARIES.segments.map((segment) => ({
     id: segment.id,
-    paths: [segment.points.map((point) => sourceBoundaryPointToMainPoint(point, projection))],
+    paths: mainConstellationBoundaryPathSegments(segment.points, projection),
   }));
 }
 
 function renderConstellationBoundaries(projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
-    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="#75d5a9" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${CONSTELLATION_BOUNDARY_WIDTH_PT}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
+    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" opacity="${CONSTELLATION_BOUNDARY_OPACITY}" fill="none" stroke="#ffffff" stroke-width="${illustratorPointSize(CONSTELLATION_BOUNDARY_WIDTH_PT)}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${MAIN_CHART_PLOT_CLIP_ID})">`,
   ];
 
   for (const boundary of mainConstellationBoundaryPaths(projection)) {
@@ -886,7 +988,7 @@ function renderMagnitudeScale(width, height, padding) {
   };
   const lines = [
     `  <g id="magnitude-scale" font-family="Arial, Helvetica, sans-serif">`,
-    `    <text x="${number(titleX)}" y="${number(y + 5)}" fill="${PRINT_CHART.text}" fill-opacity="0.9" font-size="14" font-weight="700">visual magnitude</text>`,
+    `    <text x="${number(titleX)}" y="${number(y + 5)}" fill="${PRINT_CHART.text}" fill-opacity="0.9" font-size="${illustratorPointSize(14)}" font-weight="700">visual magnitude</text>`,
     `    <line x1="${number(xStart)}" y1="${number(y)}" x2="${number(xEnd)}" y2="${number(y)}" stroke="${PRINT_CHART.mutedText}" stroke-opacity="0.42" stroke-width="1" />`,
   ];
 
@@ -897,7 +999,7 @@ function renderMagnitudeScale(width, height, padding) {
     lines.push(
       `    <circle cx="${number(x)}" cy="${number(y)}" r="${number(radius)}" fill="${colorForStar({ mag: magnitude })}" stroke="${PRINT_CHART.background}" stroke-width="${number(strokeWidth)}" />`,
     );
-    lines.push(`    <text x="${number(x)}" y="${number(labelY)}" fill="${PRINT_CHART.mutedText}" fill-opacity="0.78" font-size="10" text-anchor="middle">${magnitude}</text>`);
+    lines.push(`    <text x="${number(x)}" y="${number(labelY)}" fill="${PRINT_CHART.mutedText}" fill-opacity="0.78" font-size="${illustratorPointSize(10)}" text-anchor="middle">${magnitude}</text>`);
   }
 
   lines.push('  </g>');
@@ -1318,7 +1420,7 @@ function renderInsetCoordinateLabels(idPrefix, inset, bounds, projection) {
   const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
   const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
   const lines = [
-    `    <g id="${idPrefix}-coordinate-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="13">`,
+    `    <g id="${idPrefix}-coordinate-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(13)}">`,
   ];
 
   const raTickStepHours = bounds.labels?.raStepHours ?? 10 / 60;
@@ -1373,7 +1475,7 @@ function renderInsetStars(idPrefix, stars, magnitudeRange, projection) {
 function renderInsetStarLabels(idPrefix, stars, magnitudeRange, projection) {
   const labelStars = stars.filter((star) => star.proper || star.mag <= 4.3);
   const lines = [
-    `    <g id="${idPrefix}-star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="11">`,
+    `    <g id="${idPrefix}-star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(11)}">`,
   ];
 
   for (const star of labelStars) {
@@ -1403,8 +1505,8 @@ function renderGaiaInset({ idPrefix, layerName, title, inset, bounds, stars = []
     `      <clipPath id="${idPrefix}-clip"><path d="${boundaryPath}" /></clipPath>`,
     '    </defs>',
     `    <rect id="${idPrefix}-background" width="${inset.width}" height="${inset.height}" fill="${PRINT_CHART.background}" />`,
-    `    <text id="${idPrefix}-title" x="${plotX}" y="28" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="22">${escapeXml(title)}</text>`,
-    `    <text id="${idPrefix}-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="12">${escapeXml(sourceLabel)} / magnitude &lt;= ${bounds.magLimit} / ${escapeXml(boundsSummary)}</text>`,
+    `    <text id="${idPrefix}-title" x="${plotX}" y="28" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(22)}">${escapeXml(title)}</text>`,
+    `    <text id="${idPrefix}-subtitle" x="${plotX}" y="48" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(12)}">${escapeXml(sourceLabel)} / magnitude &lt;= ${bounds.magLimit} / ${escapeXml(boundsSummary)}</text>`,
     renderInsetGrid(idPrefix, inset, bounds, projection),
     renderInsetCoordinateLabels(idPrefix, inset, bounds, projection),
     renderInsetStars(idPrefix, stars, magnitudeRange, projection),
@@ -1657,10 +1759,8 @@ function polarConstellationBoundaryPathSegments(path, chart, centerX, centerY, r
 }
 
 function renderPolarConstellationBoundaries(chart, centerX, centerY, radius) {
-  const stroke = chart.id === 'south-polar' ? '#fff' : '#75d5a9';
-  const strokeWidth = chart.id === 'south-polar' ? 0.6 : CONSTELLATION_BOUNDARY_WIDTH_PT;
   const lines = [
-    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" fill="none" stroke="${stroke}" stroke-opacity="${CONSTELLATION_BOUNDARY_OPACITY}" stroke-width="${strokeWidth}pt" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
+    `  <g id="constellation-boundaries" data-layer="Constellation boundaries" opacity="${CONSTELLATION_BOUNDARY_OPACITY}" fill="none" stroke="#ffffff" stroke-width="${illustratorPointSize(CONSTELLATION_BOUNDARY_WIDTH_PT)}" stroke-linecap="round" stroke-linejoin="round" stroke-dasharray="6 7" clip-path="url(#${POLAR_CHART_PLOT_CLIP_ID})">`,
   ];
 
   for (const boundary of CONSTELLATION_BOUNDARIES.segments) {
@@ -1784,7 +1884,7 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   const decLabelDirection = chart.mirrorRa ? -1 : 1;
   const decLabelAnchor = chart.mirrorRa ? 'end' : 'start';
   const lines = [
-    `  <g id="polar-grid-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
+    `  <g id="polar-grid-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(16)}">`,
   ];
 
   for (const hour of createRaTicks(1)) {
@@ -1949,7 +2049,7 @@ function renderPolarStarChartLayer(dataset, chart) {
       `    <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-opacity="${POLAR_OUTER_FRAME_OPACITY}" stroke-width="${POLAR_OUTER_FRAME_WIDTH_PT}pt">`,
       `      <circle cx="${number(centerX)}" cy="${number(centerY)}" r="${number(radius * POLAR_OUTER_FRAME_RADIUS_SCALE)}" />`,
       '    </g>',
-      `    <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="16">`,
+      `    <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(16)}">`,
       `      <text x="${POLAR_CHART.padding}" y="${height - 34}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / declination ${escapeXml(decSummary)} / ${stars.length.toLocaleString()} stars</text>`,
       '    </g>',
       '  </g>',
@@ -1992,7 +2092,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
     `  <g id="frame" fill="none" stroke="${PRINT_CHART.frame}" stroke-width="2">`,
     `    <rect x="${padding}" y="${number(projection.plotTop)}" width="${width - padding * 2}" height="${number(projection.plotHeight)}" />`,
     '  </g>',
-    `  <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="18">`,
+    `  <g id="legend" fill="${PRINT_CHART.mutedText}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(18)}">`,
     `    <text x="${padding}" y="${height - 24}">HYG v4.2 / CC-BY-SA 4.0 / magnitude &lt;= ${dataset.magLimit} / declination ${escapeXml(decSummary)} / ${stars.length.toLocaleString()} stars</text>`,
     '  </g>',
     renderMagnitudeScale(width, height, padding),
