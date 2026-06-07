@@ -657,8 +657,8 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
 }
 
 function renderMainDecAxisTicks(width, padding, projection = createMainChartProjection(width, DEFAULT_CHART.height, padding)) {
-  const leftAxisX = padding + MAIN_INNER_BORDER_INSET;
-  const rightAxisX = width - padding - MAIN_INNER_BORDER_INSET;
+  const leftAxisX = padding;
+  const rightAxisX = width - padding;
   const lines = [
     `  <g id="main-dec-axis-ticks" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_LABEL_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
   ];
@@ -668,10 +668,9 @@ function renderMainDecAxisTicks(width, padding, projection = createMainChartProj
     if (isOnStep(dec, POLAR_DEC_LABEL_STEP_DEGREES)) continue;
 
     const y = projection.project(0, dec).y;
-    const tickLength = isOnStep(dec, POLAR_DEC_MAJOR_TICK_STEP_DEGREES) ? POLAR_DEC_MAJOR_TICK_LENGTH : POLAR_DEC_MINOR_TICK_LENGTH;
-    const halfTickLength = tickLength / 2;
-    lines.push(`    <line x1="${number(leftAxisX - halfTickLength)}" y1="${number(y)}" x2="${number(leftAxisX + halfTickLength)}" y2="${number(y)}" />`);
-    lines.push(`    <line x1="${number(rightAxisX - halfTickLength)}" y1="${number(y)}" x2="${number(rightAxisX + halfTickLength)}" y2="${number(y)}" />`);
+    const tickLength = isOnStep(dec, POLAR_DEC_MAJOR_TICK_STEP_DEGREES) ? MAIN_RA_MEDIUM_TICK_LENGTH : MAIN_RA_MINOR_TICK_LENGTH;
+    lines.push(`    <line x1="${number(leftAxisX)}" y1="${number(y)}" x2="${number(leftAxisX + tickLength)}" y2="${number(y)}" />`);
+    lines.push(`    <line x1="${number(rightAxisX)}" y1="${number(y)}" x2="${number(rightAxisX - tickLength)}" y2="${number(y)}" />`);
   }
 
   lines.push('  </g>');
