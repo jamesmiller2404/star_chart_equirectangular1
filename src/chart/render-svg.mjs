@@ -43,7 +43,7 @@ const POLAR_DIM_STAR_RADIUS_SCALE = 1.4;
 const POLAR_BRIGHT_STAR_RADIUS_ENHANCEMENT = 1.35;
 const STAR_LABEL_TIGHTEN_AXIS_PX = Math.sqrt(9.5);
 const illustratorPointSize = (points) => Number((points * SVG_USER_UNITS_PER_ILLUSTRATOR_PX).toFixed(3));
-const STAR_NAME_LABEL_FONT_FAMILY = "'Alegreya Sans SC Thin', 'Alegreya Sans SC', sans-serif";
+const STAR_NAME_LABEL_FONT_FAMILY = "'Alegreya Sans Thin', 'Alegreya Sans', sans-serif";
 const STAR_NAME_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const STAR_NAME_LABEL_FILL = '#ffffff';
 const BAYER_LABEL_FONT_FAMILY = "'Minion Pro', serif";
@@ -1513,7 +1513,7 @@ function renderInsetStars(idPrefix, stars, magnitudeRange, projection) {
 function renderInsetStarLabels(idPrefix, stars, magnitudeRange, projection) {
   const labelStars = stars.filter((star) => star.proper || star.mag <= 4.3);
   const lines = [
-    `    <g id="${idPrefix}-star-labels" fill="${PRINT_CHART.text}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(11)}">`,
+    `    <g id="${idPrefix}-star-labels" fill="${PRINT_CHART.text}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${illustratorPointSize(11)}">`,
   ];
 
   for (const star of labelStars) {
