@@ -53,6 +53,9 @@ const RA_DEC_LABEL_FONT_FAMILY = "'Cinzel Medium', Cinzel, serif";
 const RA_DEC_LABEL_FONT_SIZE = illustratorPointSize(10);
 const RA_DEC_LABEL_FONT_WEIGHT = 500;
 const RA_DEC_LABEL_FILL = '#ffffff';
+const MAIN_RA_TOP_LABEL_OFFSET_PX = 8;
+const MAIN_RA_BOTTOM_LABEL_OFFSET_PX = 18;
+const MAIN_DEC_LABEL_OFFSET_PX = 7;
 const CONSTELLATION_LABEL_FONT_FAMILY = "Garamond, serif";
 const CONSTELLATION_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const CONSTELLATION_LABEL_FILL = '#ffffff';
@@ -643,8 +646,8 @@ function renderGridLabels(width, height, padding, projection = createMainChartPr
 
   for (const hour of createRaTicks(1)) {
     const x = padding + ((24 - hour) / 24) * (width - padding * 2);
-    lines.push(`    <text x="${number(x)}" y="${number(projection.plotTop - 20)}" text-anchor="middle">${hour}h</text>`);
-    lines.push(`    <text x="${number(x)}" y="${number(projection.plotBottom + 30)}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(x)}" y="${number(projection.plotTop - MAIN_RA_TOP_LABEL_OFFSET_PX)}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(x)}" y="${number(projection.plotBottom + MAIN_RA_BOTTOM_LABEL_OFFSET_PX)}" text-anchor="middle">${hour}h</text>`);
   }
 
   const decLabelTicks = mainDecLabelTicks(10, projection).filter((dec) => (
@@ -653,8 +656,8 @@ function renderGridLabels(width, height, padding, projection = createMainChartPr
 
   for (const dec of decLabelTicks) {
     const y = projection.project(0, dec).y;
-    lines.push(`    <text x="${padding - 12}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
-    lines.push(`    <text x="${width - padding + 12}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
+    lines.push(`    <text x="${padding - MAIN_DEC_LABEL_OFFSET_PX}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
+    lines.push(`    <text x="${width - padding + MAIN_DEC_LABEL_OFFSET_PX}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
   }
 
   lines.push('  </g>');
