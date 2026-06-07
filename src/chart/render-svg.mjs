@@ -65,6 +65,31 @@ const POLAR_STAR_LABEL_X_OFFSET = (8 - STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const POLAR_STAR_LABEL_Y_OFFSET = (-6 + STAR_LABEL_TIGHTEN_AXIS_PX) / 2;
 const MAIN_CHART_PLOT_CLIP_ID = 'main-chart-plot-clip';
 const POLAR_CHART_PLOT_CLIP_ID = 'polar-chart-plot-clip';
+const POLAR_CHART = {
+  widthIn: 12,
+  heightIn: 12,
+  padding: 90,
+};
+const POLAR_CLEAN_INNER_DECLINATION = 85;
+const POLAR_OUTER_FRAME_RADIUS_SCALE = 1.02;
+const POLAR_OUTER_FRAME_OPACITY = 0.65;
+const POLAR_OUTER_FRAME_WIDTH_PT = 1.2;
+const POLAR_RA_FRAME_TICK_STEP_MINUTES = 5;
+const POLAR_RA_FRAME_MAJOR_TICK_MINUTES = new Set([20, 40]);
+const POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO = 0.5;
+const POLAR_DEC_TICK_STEP_DEGREES = 1;
+const POLAR_DEC_MAJOR_TICK_STEP_DEGREES = 5;
+const POLAR_DEC_LABEL_STEP_DEGREES = 10;
+const POLAR_DEC_MINOR_TICK_LENGTH = 8;
+const POLAR_DEC_MAJOR_TICK_LENGTH = 14;
+const POLAR_NORTH_DEC_LABEL_X_OFFSET = -5;
+const POLAR_NORTH_DEC_AXIS_TICK_MAX = 84;
+const POLAR_SOUTH_DEC_LABEL_X_OFFSET = 5;
+const POLAR_SOUTH_DEC_AXIS_TICK_MIN = -84;
+const POLAR_CHART_RADIUS = (Math.min(POLAR_CHART.widthIn, POLAR_CHART.heightIn) * PRINT_CHART.unitsPerIn) / 2 - POLAR_CHART.padding;
+const POLAR_RA_FRAME_TICK_BAND_WIDTH = POLAR_CHART_RADIUS * (POLAR_OUTER_FRAME_RADIUS_SCALE - 1);
+const MAIN_RA_MINOR_TICK_LENGTH = POLAR_RA_FRAME_TICK_BAND_WIDTH * POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO;
+const MAIN_RA_MEDIUM_TICK_LENGTH = POLAR_RA_FRAME_TICK_BAND_WIDTH;
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
 const MILKY_WAY_LAYER_OPACITY = 0.65;
 const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
@@ -610,7 +635,7 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
   for (const tick of createRaMinuteTicks(5)) {
     if (tick.isHour) continue;
     const x = padding + ((24 - tick.hour) / 24) * (width - padding * 2);
-    const tickLength = tick.isMedium ? 18 : 9;
+    const tickLength = tick.isMedium ? MAIN_RA_MEDIUM_TICK_LENGTH : MAIN_RA_MINOR_TICK_LENGTH;
     const opacity = tick.isMedium ? GRID_OPACITY : 0.3;
     lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotTop)}" x2="${number(x)}" y2="${number(projection.plotTop + tickLength)}" stroke-opacity="${opacity}" />`);
     lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotBottom)}" x2="${number(x)}" y2="${number(projection.plotBottom - tickLength)}" stroke-opacity="${opacity}" />`);
@@ -1577,28 +1602,6 @@ function renderSvgDocument({ widthIn, heightIn, title, desc, ariaLabel, xmlDecla
 
   return lines.join('\n');
 }
-
-const POLAR_CHART = {
-  widthIn: 12,
-  heightIn: 12,
-  padding: 90,
-};
-const POLAR_CLEAN_INNER_DECLINATION = 85;
-const POLAR_OUTER_FRAME_RADIUS_SCALE = 1.02;
-const POLAR_OUTER_FRAME_OPACITY = 0.65;
-const POLAR_OUTER_FRAME_WIDTH_PT = 1.2;
-const POLAR_RA_FRAME_TICK_STEP_MINUTES = 5;
-const POLAR_RA_FRAME_MAJOR_TICK_MINUTES = new Set([20, 40]);
-const POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO = 0.5;
-const POLAR_DEC_TICK_STEP_DEGREES = 1;
-const POLAR_DEC_MAJOR_TICK_STEP_DEGREES = 5;
-const POLAR_DEC_LABEL_STEP_DEGREES = 10;
-const POLAR_DEC_MINOR_TICK_LENGTH = 8;
-const POLAR_DEC_MAJOR_TICK_LENGTH = 14;
-const POLAR_NORTH_DEC_LABEL_X_OFFSET = -5;
-const POLAR_NORTH_DEC_AXIS_TICK_MAX = 84;
-const POLAR_SOUTH_DEC_LABEL_X_OFFSET = 5;
-const POLAR_SOUTH_DEC_AXIS_TICK_MIN = -84;
 
 function polarChartSize() {
   return {
