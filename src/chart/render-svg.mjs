@@ -49,6 +49,10 @@ const STAR_NAME_LABEL_FILL = '#ffffff';
 const BAYER_LABEL_FONT_FAMILY = "'Minion Pro', serif";
 const BAYER_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const BAYER_LABEL_FILL = '#ffffff';
+const RA_DEC_LABEL_FONT_FAMILY = "'Cinzel Medium', Cinzel, serif";
+const RA_DEC_LABEL_FONT_SIZE = illustratorPointSize(10);
+const RA_DEC_LABEL_FONT_WEIGHT = 500;
+const RA_DEC_LABEL_FILL = '#ffffff';
 const CONSTELLATION_LABEL_FONT_FAMILY = "Garamond, serif";
 const CONSTELLATION_LABEL_FONT_SIZE = illustratorPointSize(5.6);
 const CONSTELLATION_LABEL_FILL = '#ffffff';
@@ -632,7 +636,7 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
 
 function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
   const lines = [
-    `  <g id="ra-dec-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(18)}">`,
+    `  <g id="ra-dec-labels" fill="${RA_DEC_LABEL_FILL}" font-family="${RA_DEC_LABEL_FONT_FAMILY}" font-size="${RA_DEC_LABEL_FONT_SIZE}" font-weight="${RA_DEC_LABEL_FONT_WEIGHT}">`,
   ];
 
   for (const hour of createRaTicks(1)) {
@@ -1448,7 +1452,7 @@ function renderInsetCoordinateLabels(idPrefix, inset, bounds, projection) {
   const plotWidth = inset.width - inset.paddingLeft - inset.paddingRight;
   const plotHeight = inset.height - inset.paddingTop - inset.paddingBottom;
   const lines = [
-    `    <g id="${idPrefix}-coordinate-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(13)}">`,
+    `    <g id="${idPrefix}-coordinate-labels" fill="${RA_DEC_LABEL_FILL}" font-family="${RA_DEC_LABEL_FONT_FAMILY}" font-size="${RA_DEC_LABEL_FONT_SIZE}" font-weight="${RA_DEC_LABEL_FONT_WEIGHT}">`,
   ];
 
   const raTickStepHours = bounds.labels?.raStepHours ?? 10 / 60;
@@ -1582,6 +1586,10 @@ const POLAR_DEC_MAJOR_TICK_STEP_DEGREES = 5;
 const POLAR_DEC_LABEL_STEP_DEGREES = 10;
 const POLAR_DEC_MINOR_TICK_LENGTH = 8;
 const POLAR_DEC_MAJOR_TICK_LENGTH = 14;
+const POLAR_NORTH_DEC_LABEL_X_OFFSET = -5;
+const POLAR_NORTH_DEC_AXIS_TICK_MAX = 84;
+const POLAR_SOUTH_DEC_LABEL_X_OFFSET = 5;
+const POLAR_SOUTH_DEC_AXIS_TICK_MIN = -84;
 
 function polarChartSize() {
   return {
@@ -1912,7 +1920,7 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   const decLabelDirection = chart.mirrorRa ? -1 : 1;
   const decLabelAnchor = chart.mirrorRa ? 'end' : 'start';
   const lines = [
-    `  <g id="polar-grid-labels" fill="${PRINT_CHART.mutedText}" fill-opacity="${GRID_LABEL_OPACITY}" font-family="Arial, Helvetica, sans-serif" font-size="${illustratorPointSize(16)}">`,
+    `  <g id="polar-grid-labels" fill="${RA_DEC_LABEL_FILL}" font-family="${RA_DEC_LABEL_FONT_FAMILY}" font-size="${RA_DEC_LABEL_FONT_SIZE}" font-weight="${RA_DEC_LABEL_FONT_WEIGHT}">`,
   ];
 
   for (const hour of createRaTicks(1)) {
@@ -1924,7 +1932,13 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
     if (Math.abs(dec) === 90 || dec === chart.decMin || dec === chart.decMax) continue;
     const circleRadius = polarRadiusForDec(dec, chart, radius);
-    const x = centerX + decLabelDirection * (circleRadius + 8);
+    const labelAdjustment =
+      chart.id === 'north-polar'
+        ? POLAR_NORTH_DEC_LABEL_X_OFFSET
+        : chart.id === 'south-polar'
+          ? POLAR_SOUTH_DEC_LABEL_X_OFFSET
+          : 0;
+    const x = centerX + decLabelDirection * (circleRadius + 8) + labelAdjustment;
     lines.push(`    <text x="${number(x)}" y="${number(centerY - 5)}" text-anchor="${decLabelAnchor}">${dec > 0 ? '+' : ''}${dec}°</text>`);
   }
 
@@ -1938,7 +1952,9 @@ function renderPolarDecAxisTicks(chart, centerX, centerY, radius) {
     `  <g id="polar-dec-axis-ticks" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_LABEL_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
   ];
 
-  for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += POLAR_DEC_TICK_STEP_DEGREES) {
+  const maxTickDec = chart.id === 'north-polar' ? Math.min(chart.decMax, POLAR_NORTH_DEC_AXIS_TICK_MAX) : chart.decMax;
+  const minTickDec = chart.id === 'south-polar' ? Math.max(chart.decMin, POLAR_SOUTH_DEC_AXIS_TICK_MIN) : chart.decMin;
+  for (let dec = minTickDec; dec <= maxTickDec + 1e-9; dec += POLAR_DEC_TICK_STEP_DEGREES) {
     if (Math.abs(dec) === 90 || dec === chart.decMin || dec === chart.decMax) continue;
     if (isOnStep(dec, POLAR_DEC_LABEL_STEP_DEGREES)) continue;
 

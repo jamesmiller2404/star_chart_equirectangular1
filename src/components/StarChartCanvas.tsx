@@ -39,6 +39,11 @@ type HoverTarget = {
   star: StarRecord;
 };
 
+const CSS_PIXELS_PER_POINT = 96 / 72;
+const RA_DEC_LABEL_FONT_POINTS = 10;
+const RA_DEC_LABEL_FILL = '#ffffff';
+const RA_DEC_LABEL_FONT_FAMILY = '"Cinzel Medium", Cinzel, serif';
+
 export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const tooltipRef = useRef<HTMLDivElement | null>(null);
@@ -88,7 +93,7 @@ export function StarChartCanvas({ dataUrl }: { dataUrl: string }) {
       context.fillStyle = '#05070b';
       context.fillRect(0, 0, width, height);
 
-      drawGrid(context, width, height, padding);
+      drawGrid(context, width, height, padding, dpr);
       drawCoordinateReferenceLines(context, width, height, padding, dpr);
       drawConstellationBoundaries(context, width, height, padding, dpr);
       drawConstellationLines(context, dataset, width, height, padding, dpr);
@@ -337,11 +342,11 @@ function drawConstellationLabels(
   context.restore();
 }
 
-function drawGrid(context: CanvasRenderingContext2D, width: number, height: number, padding: number) {
+function drawGrid(context: CanvasRenderingContext2D, width: number, height: number, padding: number, dpr: number) {
   context.strokeStyle = `rgba(114, 130, 151, ${GRID_OPACITY})`;
-  context.fillStyle = 'rgba(210, 220, 235, 0.78)';
+  context.fillStyle = RA_DEC_LABEL_FILL;
   context.lineWidth = 1;
-  context.font = `${Math.max(11, width / 120)}px system-ui, sans-serif`;
+  context.font = `500 ${RA_DEC_LABEL_FONT_POINTS * CSS_PIXELS_PER_POINT * dpr}px ${RA_DEC_LABEL_FONT_FAMILY}`;
 
   for (const tick of createRaMinuteTicks(5)) {
     if (tick.isHour) continue;
