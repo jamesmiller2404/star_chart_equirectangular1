@@ -1960,7 +1960,7 @@ function renderPolarGridLabels(chart, centerX, centerY, radius) {
   for (const hour of createRaTicks(1)) {
     if (hour === 24) continue;
     const point = polarPointForCoordinates(hour, chart.poleDec > 0 ? chart.decMin : chart.decMax, chart, centerX, centerY, radius + 28);
-    lines.push(`    <text x="${number(point.x)}" y="${number(point.y + 6)}" text-anchor="middle">${hour}h</text>`);
+    lines.push(`    <text x="${number(point.x)}" y="${number(point.y)}" text-anchor="middle" dominant-baseline="middle">${hour}h</text>`);
   }
 
   for (let dec = chart.decMin; dec <= chart.decMax + 1e-9; dec += 10) {
