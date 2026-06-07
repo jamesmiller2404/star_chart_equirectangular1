@@ -90,6 +90,7 @@ const POLAR_CHART_RADIUS = (Math.min(POLAR_CHART.widthIn, POLAR_CHART.heightIn) 
 const POLAR_RA_FRAME_TICK_BAND_WIDTH = POLAR_CHART_RADIUS * (POLAR_OUTER_FRAME_RADIUS_SCALE - 1);
 const MAIN_RA_MINOR_TICK_LENGTH = POLAR_RA_FRAME_TICK_BAND_WIDTH * POLAR_RA_FRAME_MINOR_TICK_WIDTH_RATIO;
 const MAIN_RA_MEDIUM_TICK_LENGTH = POLAR_RA_FRAME_TICK_BAND_WIDTH;
+const MAIN_INNER_BORDER_INSET = POLAR_RA_FRAME_TICK_BAND_WIDTH;
 const D3_CELESTIAL_MILKY_WAY = JSON.parse(fs.readFileSync(new URL('../../data/milky-way/d3-celestial-mw.json', import.meta.url), 'utf8'));
 const MILKY_WAY_LAYER_OPACITY = 0.65;
 const MILKY_WAY_FEATURE_OPACITIES = [0.063, 0.077, 0.091, 0.112, 0.14];
@@ -646,14 +647,6 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
     lines.push(`    <line x1="${number(x)}" y1="${number(projection.plotTop)}" x2="${number(x)}" y2="${number(projection.plotBottom)}" stroke-opacity="${GRID_OPACITY}" />`);
   }
 
-  for (const tick of mainDecTicks(5, projection).map((dec) => ({ dec, isMajor: dec % 10 === 0 }))) {
-    if (tick.isMajor) continue;
-    const y = projection.project(0, tick.dec).y;
-    const tickLength = 9;
-    lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${padding + tickLength}" y2="${number(y)}" stroke-opacity="0.3" />`);
-    lines.push(`    <line x1="${width - padding}" y1="${number(y)}" x2="${width - padding - tickLength}" y2="${number(y)}" stroke-opacity="0.3" />`);
-  }
-
   for (const dec of mainDecLabelTicks(10, projection)) {
     const y = projection.project(0, dec).y;
     lines.push(`    <line x1="${padding}" y1="${number(y)}" x2="${width - padding}" y2="${number(y)}" stroke-opacity="${GRID_OPACITY}" />`);
@@ -661,6 +654,36 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
 
   lines.push('  </g>');
   return lines.join('\n');
+}
+
+function renderMainDecAxisTicks(width, padding, projection = createMainChartProjection(width, DEFAULT_CHART.height, padding)) {
+  const leftAxisX = padding + MAIN_INNER_BORDER_INSET;
+  const rightAxisX = width - padding - MAIN_INNER_BORDER_INSET;
+  const lines = [
+    `  <g id="main-dec-axis-ticks" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_LABEL_OPACITY}" stroke-width="1" stroke-linecap="butt">`,
+  ];
+
+  for (const dec of mainDecTicks(POLAR_DEC_TICK_STEP_DEGREES, projection)) {
+    if (dec === projection.decMin || dec === projection.decMax) continue;
+    if (isOnStep(dec, POLAR_DEC_LABEL_STEP_DEGREES)) continue;
+
+    const y = projection.project(0, dec).y;
+    const tickLength = isOnStep(dec, POLAR_DEC_MAJOR_TICK_STEP_DEGREES) ? POLAR_DEC_MAJOR_TICK_LENGTH : POLAR_DEC_MINOR_TICK_LENGTH;
+    const halfTickLength = tickLength / 2;
+    lines.push(`    <line x1="${number(leftAxisX - halfTickLength)}" y1="${number(y)}" x2="${number(leftAxisX + halfTickLength)}" y2="${number(y)}" />`);
+    lines.push(`    <line x1="${number(rightAxisX - halfTickLength)}" y1="${number(y)}" x2="${number(rightAxisX + halfTickLength)}" y2="${number(y)}" />`);
+  }
+
+  lines.push('  </g>');
+  return lines.join('\n');
+}
+
+function renderMainInnerBorder(width, padding, projection = createMainChartProjection(width, DEFAULT_CHART.height, padding)) {
+  return [
+    `  <g id="main-inner-border" fill="none" stroke="${PRINT_CHART.grid}" stroke-opacity="${GRID_OPACITY}" stroke-width="1">`,
+    `    <rect x="${number(padding + MAIN_INNER_BORDER_INSET)}" y="${number(projection.plotTop + MAIN_INNER_BORDER_INSET)}" width="${number(width - padding * 2 - MAIN_INNER_BORDER_INSET * 2)}" height="${number(projection.plotHeight - MAIN_INNER_BORDER_INSET * 2)}" />`,
+    '  </g>',
+  ].join('\n');
 }
 
 function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding), options = {}) {
@@ -2138,6 +2161,8 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
     renderPlotClipPath(width, height, padding, projection),
     renderMilkyWayLayer(width, height, padding, projection),
     renderGrid(width, height, padding, projection),
+    renderMainInnerBorder(width, padding, projection),
+    renderMainDecAxisTicks(width, padding, projection),
     renderGridLabels(width, height, padding, projection, { showBoundaryDecLabels: chart.showBoundaryDecLabels }),
     renderCoordinateReferenceLines(width, height, padding, projection),
     renderConstellationBoundaries(projection),
