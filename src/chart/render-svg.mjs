@@ -218,6 +218,7 @@ export const MAIN_STAR_CHARTS = {
     decMin: -55,
     decMax: 55,
     preserveFullSkyScale: true,
+    showBoundaryDecLabels: false,
   },
 };
 
@@ -634,7 +635,8 @@ function renderGrid(width, height, padding, projection = createMainChartProjecti
   return lines.join('\n');
 }
 
-function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding)) {
+function renderGridLabels(width, height, padding, projection = createMainChartProjection(width, height, padding), options = {}) {
+  const { showBoundaryDecLabels = true } = options;
   const lines = [
     `  <g id="ra-dec-labels" fill="${RA_DEC_LABEL_FILL}" font-family="${RA_DEC_LABEL_FONT_FAMILY}" font-size="${RA_DEC_LABEL_FONT_SIZE}" font-weight="${RA_DEC_LABEL_FONT_WEIGHT}">`,
   ];
@@ -645,7 +647,11 @@ function renderGridLabels(width, height, padding, projection = createMainChartPr
     lines.push(`    <text x="${number(x)}" y="${number(projection.plotBottom + 30)}" text-anchor="middle">${hour}h</text>`);
   }
 
-  for (const dec of mainDecLabelTicks(10, projection)) {
+  const decLabelTicks = mainDecLabelTicks(10, projection).filter((dec) => (
+    showBoundaryDecLabels || (dec !== projection.decMin && dec !== projection.decMax)
+  ));
+
+  for (const dec of decLabelTicks) {
     const y = projection.project(0, dec).y;
     lines.push(`    <text x="${padding - 12}" y="${number(y + 6)}" text-anchor="end">${dec > 0 ? '+' : ''}${dec}</text>`);
     lines.push(`    <text x="${width - padding + 12}" y="${number(y + 6)}" text-anchor="start">${dec > 0 ? '+' : ''}${dec}</text>`);
@@ -992,7 +998,7 @@ function isPleiadesMainChartLabelStar(star) {
 
 function renderMainClusterNameLabels(clusterLabels, projection = createMainChartProjection(DEFAULT_CHART.width, DEFAULT_CHART.height, DEFAULT_CHART.padding)) {
   const lines = [
-    `  <g id="cluster-name-labels" fill="${STAR_NAME_LABEL_FILL}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${STAR_NAME_LABEL_FONT_SIZE}" font-weight="600" text-anchor="middle">`,
+    `  <g id="cluster-name-labels" fill="${STAR_NAME_LABEL_FILL}" font-family="${STAR_NAME_LABEL_FONT_FAMILY}" font-size="${STAR_NAME_LABEL_FONT_SIZE}" text-anchor="middle">`,
   ];
 
   for (const label of clusterLabels) {
@@ -2126,7 +2132,7 @@ function renderMainStarChartLayer(dataset, { chartX = 0, chartY = 0, chart = MAI
     renderPlotClipPath(width, height, padding, projection),
     renderMilkyWayLayer(width, height, padding, projection),
     renderGrid(width, height, padding, projection),
-    renderGridLabels(width, height, padding, projection),
+    renderGridLabels(width, height, padding, projection, { showBoundaryDecLabels: chart.showBoundaryDecLabels }),
     renderCoordinateReferenceLines(width, height, padding, projection),
     renderConstellationBoundaries(projection),
     renderConstellationLines({ ...dataset, stars }, projection),
